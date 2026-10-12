@@ -169,7 +169,7 @@ public final class ContainerHandlers {
 	}
 
 	/** The open screen. It moved from {@code Minecraft.screen} to {@code Gui.screen()} in 26.2. */
-	private static Screen currentScreen() {
+	static Screen currentScreen() {
 		//? if <26.2 {
 		return Minecraft.getInstance().screen;
 		//?} else

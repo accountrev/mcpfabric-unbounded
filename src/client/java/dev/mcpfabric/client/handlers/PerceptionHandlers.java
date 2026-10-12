@@ -120,23 +120,33 @@ public final class PerceptionHandlers {
 		LocalPlayer player = ClientMc.player();
 		JsonObject o = new JsonObject();
 		IntegratedServer server = mc.getSingleplayerServer();
+		o.addProperty("worldId", worldId(mc));
 		if (server != null) {
-			Path root = server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
-			String folder = root.getFileName() == null ? "world" : root.getFileName().toString();
-			o.addProperty("worldId", "sp:" + folder);
 			o.addProperty("kind", "singleplayer");
 			o.addProperty("name", server.getWorldData().getLevelName());
 		} else {
-			ServerData data = mc.getCurrentServer();
-			String address = data != null && data.ip != null ? data.ip.trim().toLowerCase(Locale.ROOT) : "unknown";
-			// Stable per server, but neither the address nor the server list entry's name leaves the game:
-			// the id reaches the MCP client, its model and the agent's database.
-			o.addProperty("worldId", "mp:" + OpaqueIds.of(McpFabric.config().worldIdKey, address));
 			o.addProperty("kind", "multiplayer");
 		}
 		o.addProperty("player", player.getName().getString());
 		o.addProperty("dimension", Levels.dimensionId(player.level()));
 		return o;
+	}
+
+	/** The id of the world being played: {@code sp:<save folder>} or {@code mp:<opaque server id>}. */
+	static String worldId(Minecraft mc) {
+		IntegratedServer server = mc.getSingleplayerServer();
+		if (server == null) return multiplayerId(mc.getCurrentServer());
+		Path root = server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
+		return "sp:" + (root.getFileName() == null ? "world" : root.getFileName().toString());
+	}
+
+	/**
+	 * Stable per server, but neither the address nor the server list entry's name leaves the game:
+	 * the id reaches the MCP client, its model and the agent's database.
+	 */
+	static String multiplayerId(ServerData data) {
+		String address = data != null && data.ip != null ? data.ip.trim().toLowerCase(Locale.ROOT) : "unknown";
+		return "mp:" + OpaqueIds.of(McpFabric.config().worldIdKey, address);
 	}
 
 	// --- scan ---------------------------------------------------------------------------------

@@ -11,6 +11,7 @@ import dev.mcpfabric.client.handlers.LocalPlayerHandlers;
 import dev.mcpfabric.client.handlers.NavHandlers;
 import dev.mcpfabric.client.handlers.PerceptionHandlers;
 import dev.mcpfabric.client.handlers.RecipeHandlers;
+import dev.mcpfabric.client.handlers.SessionScreenHandlers;
 import dev.mcpfabric.client.handlers.VisionHandlers;
 import net.minecraft.client.Minecraft;
 
@@ -41,13 +42,15 @@ public final class McpFabricClient {
 		ContainerHandlers.register(router);
 		RecipeHandlers.register(router);
 		ClientChatHandlers.register(router); // client variant of chat.send (speaks as local player)
+		SessionScreenHandlers.register(router); // menus: rejoin a world after a disconnect or a restart
 
 		McpFabric.LOGGER.info("[mcpfabric] client handlers registered");
 	}
 
-	/** End of every client tick: drives the {@link BotController}. */
+	/** End of every client tick: drives the {@link BotController} and remembers the world joined last. */
 	public static void onClientTick(Minecraft client) {
 		BotController.get().onClientTick(client);
+		SessionScreenHandlers.onClientTick(client);
 	}
 
 	/** The game is closing: stop the bridge so the JVM can exit (issue #24). */

@@ -578,6 +578,44 @@ export const TOOLS: ToolDef[] = [
     inputSchema: {},
   },
 
+  // ===== session / menus (client) ============================================================
+  {
+    name: "get_screen",
+    method: "screen.get",
+    title: "Current screen",
+    description:
+      "Client-only. Report where the client is: inWorld, the open screen as a coarse kind (none, pause, chat, container, death, title, multiplayer, singleplayer, disconnected, connecting, loading, other), whether the game is paused, whether join_world can run now (canJoin), and the id of the world joined last in this game run. Call it when client tools fail with no_client_player or the player stops reacting.",
+    inputSchema: {},
+    annotations: READ,
+  },
+  {
+    name: "close_screen",
+    method: "screen.close",
+    title: "Close the open screen",
+    description:
+      "Client-only, in a world. Close the open screen: leaves the pause menu, chat or a container, and respawns the player on the death screen. Fails while a world is loading and outside a world (use join_world there).",
+    inputSchema: {},
+  },
+  {
+    name: "list_worlds",
+    method: "session.worlds",
+    title: "List worlds and servers",
+    description:
+      "Client-only. List what join_world can join: saved singleplayer worlds (worldId sp:<folder>, name, lastPlayed in ms, joinable), newest first, and the server list entries as opaque mp: ids (the same ids session/agent memory uses; addresses and entry names are never returned). Also returns lastWorldId, the world joined last in this game run.",
+    inputSchema: {},
+    annotations: READ,
+  },
+  {
+    name: "join_world",
+    method: "session.join",
+    title: "Join a world or server",
+    description:
+      "Client-only, from the menus (title, multiplayer, disconnected, ... screens). Open a singleplayer world or connect to a server by worldId from list_worlds; without worldId, rejoin the world played last in this game run (after a kick, a server restart or a lost connection). Only servers in the server list, or the one played last, can be joined. Returns immediately: poll get_screen until inWorld is true.",
+    inputSchema: {
+      worldId: z.string().optional().describe('World id from list_worlds or get_screen, e.g. "sp:New World" or "mp:3f2a...". Omit to rejoin the last world.'),
+    },
+  },
+
   // ===== events ==============================================================================
   {
     name: "poll_events",

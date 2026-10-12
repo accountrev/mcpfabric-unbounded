@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- Menu recovery for the client (#14): `get_screen` reports the open screen and whether the player
+  is in a world, `close_screen` leaves the pause menu, chat or a container and respawns on the death
+  screen, `list_worlds` lists saved worlds and server list entries (servers only by their opaque
+  `mp:` id), and `join_world` opens a world or connects to a server by id, or rejoins the world
+  played last. New capability group `session`, reported and available only with
+  `enablePlayerControl`.
+
 ## [0.5.1] - 2026-10-05
 
 Fabric and NeoForge. Thanks to @heide-oficial for the review in #33 and for the private report and
