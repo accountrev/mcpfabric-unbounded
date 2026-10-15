@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Runs against the compiled server: npm run build first (npm test does).
+import { AGENT_TOOLS } from "../dist/agent/tools.js";
 import { TOOLS } from "../dist/tools.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -43,4 +44,14 @@ test("every tool calls a bridge method the mod registers, and every method is us
   assert.ok(registered.size > 0, "no router.register calls found under src/");
   assert.deepEqual([...used].filter((m) => !registered.has(m)).sort(), [], "tools calling a method the mod does not register");
   assert.deepEqual([...registered].filter((m) => !used.has(m)).sort(), [], "registered methods no tool or agent skill uses");
+});
+
+test("every tool states all four MCP hints, consistently", () => {
+  const hints = ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"];
+  for (const tool of [...TOOLS, ...AGENT_TOOLS]) {
+    for (const hint of hints) assert.equal(typeof tool.annotations?.[hint], "boolean", `${tool.name} lacks ${hint}`);
+    if (tool.annotations.readOnlyHint) assert.equal(tool.annotations.destructiveHint, false, `${tool.name} is read-only but destructive`);
+  }
+  const run = TOOLS.find((tool) => tool.name === "run_command");
+  assert.deepEqual(run.annotations, { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });
 });

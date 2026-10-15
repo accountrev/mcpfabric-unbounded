@@ -19,6 +19,12 @@ Fabric and NeoForge. Completes #14, thanks to @filiphsps.
   LAN, online options, player report, resource pack and command block screens are refused, and so
   are the Quit Game, Realms and Reset Demo World buttons.
 
+### Changed
+- Every MCP tool now states all four hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`,
+  `openWorldHint`), so clients no longer assume the spec defaults (destructive, non-idempotent, open
+  world) for tools that only move the player or set input. Tools that reach other players (`send_chat`,
+  `message_player`, `kick_player`, `run_command`, `join_world`) are marked open-world.
+
 ## [0.6.0] - 2026-10-15
 
 Fabric and NeoForge. Thanks to @filiphsps for #14.
