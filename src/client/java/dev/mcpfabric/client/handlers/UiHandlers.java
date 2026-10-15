@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
+import com.mojang.blaze3d.platform.InputConstants;
 import dev.mcpfabric.bridge.RpcContext;
 import dev.mcpfabric.bridge.RpcException;
 import dev.mcpfabric.bridge.RpcRouter;
@@ -136,11 +137,13 @@ public final class UiHandlers {
 			double x = w.getX() + Math.max(0.5, Math.min(w.getWidth() - 0.5, w.getWidth() * fraction));
 			double y = w.getY() + w.getHeight() / 2.0;
 			String label = w.getMessage().getString();
+			// The left button is 0 up to 26.2 and 1 since 26.3 (SDL input).
+			int left = InputConstants.MOUSE_BUTTON_LEFT;
 			//? if <1.21.9 {
-			boolean handled = w.mouseClicked(x, y, 0);
-			if (handled) w.mouseReleased(x, y, 0);
+			boolean handled = w.mouseClicked(x, y, left);
+			if (handled) w.mouseReleased(x, y, left);
 			//?} else {
-			/*MouseButtonEvent event = new MouseButtonEvent(x, y, new MouseButtonInfo(0, 0));
+			/*MouseButtonEvent event = new MouseButtonEvent(x, y, new MouseButtonInfo(left, 0));
 			boolean handled = w.mouseClicked(event, false);
 			if (handled) w.mouseReleased(event);
 			*///?}
