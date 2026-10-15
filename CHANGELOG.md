@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-15
+
+Fabric and NeoForge. Thanks to @filiphsps for #14.
+
 ### Added
 - Menu recovery for the client (#14): `get_screen` reports the open screen and whether the player
   is in a world, `close_screen` leaves the pause menu, chat or a container and respawns on the death
@@ -13,6 +17,10 @@ All notable changes to this project are documented here. The format is based on
   `mp:` id), and `join_world` opens a world or connects to a server by id, or rejoins the world
   played last. New capability group `session`, reported and available only with
   `enablePlayerControl`.
+
+### Dependencies
+- MCP server: `proxy-addr` 2.0.8 for its published security fix (GHSA-jqcg-44mw-7w3h),
+  `@modelcontextprotocol/sdk` 1.32.1. Gradle wrapper 9.8.1.
 
 ## [0.5.1] - 2026-10-05
 
