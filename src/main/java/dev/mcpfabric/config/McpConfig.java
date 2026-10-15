@@ -43,6 +43,8 @@ public final class McpConfig {
 	public boolean enableCommands = true;
 	public boolean enablePlayerControl = true;
 	public boolean enableVision = true;
+	/** Generic control of game screens (ui.*). Off by default; also needs enablePlayerControl. */
+	public boolean enableUiControl = false;
 
 	public transient Path source;
 

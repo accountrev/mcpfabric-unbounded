@@ -17,6 +17,18 @@ public final class Gates {
 		}
 	}
 
+	/**
+	 * Clicking widgets and typing into text fields of the open screen. Off by default: menus reach
+	 * settings and actions that the other tools never expose, so it needs its own flag on top of
+	 * player control.
+	 */
+	public static void uiControl() throws RpcException {
+		playerControl();
+		if (!McpFabric.config().enableUiControl) {
+			throw RpcException.unavailable("UI control is disabled in mcpfabric.config.json (enableUiControl=false).");
+		}
+	}
+
 	/** Screenshots and scene descriptions. */
 	public static void vision() throws RpcException {
 		if (!McpFabric.config().enableVision) {

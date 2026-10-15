@@ -12,6 +12,7 @@ import dev.mcpfabric.client.handlers.NavHandlers;
 import dev.mcpfabric.client.handlers.PerceptionHandlers;
 import dev.mcpfabric.client.handlers.RecipeHandlers;
 import dev.mcpfabric.client.handlers.SessionScreenHandlers;
+import dev.mcpfabric.client.handlers.UiHandlers;
 import dev.mcpfabric.client.handlers.VisionHandlers;
 import net.minecraft.client.Minecraft;
 
@@ -43,6 +44,7 @@ public final class McpFabricClient {
 		RecipeHandlers.register(router);
 		ClientChatHandlers.register(router); // client variant of chat.send (speaks as local player)
 		SessionScreenHandlers.register(router); // menus: rejoin a world after a disconnect or a restart
+		UiHandlers.register(router); // generic screen control, behind enableUiControl
 
 		McpFabric.LOGGER.info("[mcpfabric] client handlers registered");
 	}

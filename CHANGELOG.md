@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- Generic screen control for the client (#14): `get_ui` lists the widgets of the open screen,
+  `click_widget` clicks one by id or label and `set_text_field` types into a text field. New
+  capability group `ui` behind the new `enableUiControl` flag, which is off by default and also
+  needs `enablePlayerControl`. Vanilla screens are limited to the pause, title, death, options,
+  advancements, statistics, confirmation and container screens; the world, server, chat, link, LAN, online
+  options, player report, resource pack and command block screens are refused, and so are the Quit Game, Realms and
+  Reset Demo World buttons.
+
 ### Changed
 - Every MCP tool now states all four hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`,
   `openWorldHint`), so clients no longer assume the spec defaults (destructive, non-idempotent, open
