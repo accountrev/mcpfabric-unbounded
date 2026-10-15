@@ -17,7 +17,8 @@ without putting an authenticated reverse proxy in front of it, and understand th
 remote control of your game to whoever holds the token.
 
 You can narrow what the bridge allows with the `enable*` flags in `config/mcpfabric.config.json`
-(`enableWorldWrite`, `enableCommands`, `enablePlayerControl`, `enableVision`).
+(`enableWorldWrite`, `enableCommands`, `enablePlayerControl`, `enableVision`, and
+`enableUiControl`, which is off by default).
 
 ## Supported versions
 
