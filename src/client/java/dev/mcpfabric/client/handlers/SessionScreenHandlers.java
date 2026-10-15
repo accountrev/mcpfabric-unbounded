@@ -238,7 +238,7 @@ public final class SessionScreenHandlers {
 	}
 
 	/** A coarse, version-independent name for the open screen ({@code none} when there is none). */
-	private static String kind(Screen screen) {
+	static String kind(Screen screen) {
 		if (screen == null) return "none";
 		if (screen instanceof PauseScreen) return "pause";
 		if (screen instanceof DeathScreen) return "death";

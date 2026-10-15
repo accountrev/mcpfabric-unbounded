@@ -165,11 +165,17 @@ printed to logs.
   "enableWorldWrite": true,
   "enableCommands": true,
   "enablePlayerControl": true,
-  "enableVision": true
+  "enableVision": true,
+  "enableUiControl": false
 }
 ```
 
-The `enable*` flags let you switch off dangerous capability groups. `requireAuth` (default `true`)
+The `enable*` flags let you switch off dangerous capability groups. `enableUiControl` is the one
+that starts off: it lets the model click buttons and type into text fields of game screens
+(`get_ui`, `click_widget`, `set_text_field`), which reaches settings and actions the other tools
+never expose. Vanilla screens are limited to the pause, title, death, options, advancements,
+statistics, confirmation and container screens, but screens added by other mods are not restricted, so turn it on
+only when you need it, for example to test a mod's UI. It also needs `enablePlayerControl`. `requireAuth` (default `true`)
 gates every request behind the bearer token — only set it to `false` if you understand that it
 removes the sole authentication on an operator-level bridge. Keep `host` on `127.0.0.1` unless you
 fully understand the consequences — the bridge grants operator-level power. `worldIdKey` turns a
@@ -253,6 +259,7 @@ Then set `MCPFABRIC_TOKEN` in the server's environment.
 **vision (client)** — `screenshot` (PNG for vision models), `describe_scene`
 **navigation (client)** — `navigate_to` (A\*), `navigation_status`, `stop_navigation`
 **session (client)** — `get_screen`, `close_screen` (pause menu, chat, container; respawns on the death screen), `list_worlds`, `join_world` (rejoin after a kick, a server restart or a game restart)
+**ui (client, off by default: `enableUiControl`)** — `get_ui` (widgets of the open screen), `click_widget`, `set_text_field`
 **events** — `poll_events` (recent damage, deaths, chat, spawns, player join/leave)
 
 **agent runtime** ([docs/AGENT.md](docs/AGENT.md)) — persistent per-world memory, goals, map and background jobs:
