@@ -10,6 +10,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/denfry/mcpfabric?logo=github&style=flat)](https://github.com/denfry/mcpfabric/stargazers)
 [![License: MIT](https://img.shields.io/github/license/denfry/mcpfabric)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/mVZcNUAGZt)
+[![M8ven Score](https://m8ven.ai/badge/mcp/denfry-mcpfabric-1vn4r1?v=6c5af3df95ffb27c03fbe8d4881feb91)](https://m8ven.ai/mcp/denfry-mcpfabric-1vn4r1?s=readme)
 
 [Download on Modrinth](https://modrinth.com/mod/mcpfabric) ·
 [Installation](#quick-start) ·
