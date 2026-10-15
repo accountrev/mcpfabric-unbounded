@@ -8,6 +8,29 @@
  */
 import { z } from "zod";
 
+/**
+ * MCP tool hints. Every tool states all four, so clients never fall back to the spec defaults
+ * (which assume a destructive, non-idempotent, open-world tool).
+ */
+export interface ToolAnnotations {
+  readOnlyHint: boolean;
+  destructiveHint: boolean;
+  idempotentHint: boolean;
+  /** The game counts as a closed world; true only where the call reaches other people (chat, kicks, servers). */
+  openWorldHint: boolean;
+}
+
+/** Only reads the game. */
+export const READ: ToolAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+/** Changes the world or inventories in a way that cannot simply be undone; repeating it acts again. */
+export const WRITE: ToolAnnotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false };
+/** Replaces state with the given value; repeating the same call changes nothing more. */
+export const OVERWRITE: ToolAnnotations = { ...WRITE, idempotentHint: true };
+/** Acts without destroying anything (moves the player, moves items, adds a note); repeating it acts again. */
+export const ACT: ToolAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+/** Sets player input or session state; repeating the same call changes nothing more. */
+export const STEER: ToolAnnotations = { ...ACT, idempotentHint: true };
+
 export interface ToolDef {
   /** MCP tool name exposed to the model. */
   name: string;
@@ -20,12 +43,7 @@ export interface ToolDef {
   /** zod raw shape describing the tool arguments. */
   inputSchema: z.ZodRawShape;
   /** Hints surfaced to MCP clients. */
-  annotations?: {
-    readOnlyHint?: boolean;
-    destructiveHint?: boolean;
-    idempotentHint?: boolean;
-    openWorldHint?: boolean;
-  };
+  annotations: ToolAnnotations;
   /** Rendering: "json" (default) returns text + structuredContent; "image" returns an image block. */
   kind?: "json" | "image";
 }
@@ -50,9 +68,6 @@ const playerRef = {
     .string()
     .describe('Target player by name or UUID. Use "@all" where broadcasting is meaningful.'),
 };
-
-const READ = { readOnlyHint: true } as const;
-const WRITE = { destructiveHint: true } as const;
 
 // ----- catalogue ------------------------------------------------------------------------------
 
@@ -161,7 +176,7 @@ export const TOOLS: ToolDef[] = [
     description:
       "Place/replace the block at an exact position with the given block id (optionally with blockstate properties as a string like 'minecraft:oak_log[axis=y]'). Requires a server (integrated client or dedicated).",
     inputSchema: { ...vec3(), blockId: z.string().describe('Block id, optionally with state, e.g. "minecraft:stone" or "minecraft:oak_stairs[facing=east]".'), ...dimensionOpt },
-    annotations: WRITE,
+    annotations: OVERWRITE,
   },
   {
     name: "fill_blocks",
@@ -175,7 +190,7 @@ export const TOOLS: ToolDef[] = [
       blockId: z.string().describe("Block id to fill with."),
       ...dimensionOpt,
     },
-    annotations: WRITE,
+    annotations: OVERWRITE,
   },
   {
     name: "set_time",
@@ -183,7 +198,7 @@ export const TOOLS: ToolDef[] = [
     title: "Set time of day",
     description: "Set the day-time (0-24000; 0=dawn, 6000=noon, 12000=dusk, 18000=midnight). Requires a server.",
     inputSchema: { time: z.number().int().min(0).max(24000).describe("Day-time in ticks (0-24000).") },
-    annotations: WRITE,
+    annotations: OVERWRITE,
   },
   {
     name: "set_weather",
@@ -194,7 +209,7 @@ export const TOOLS: ToolDef[] = [
       weather: z.enum(["clear", "rain", "thunder"]).describe("Target weather."),
       durationSeconds: z.number().int().min(1).optional().describe("How long the weather should last."),
     },
-    annotations: WRITE,
+    annotations: OVERWRITE,
   },
 
   // ===== entities ============================================================================
@@ -242,7 +257,7 @@ export const TOOLS: ToolDef[] = [
     title: "Remove entity",
     description: "Discard (remove) a non-player entity by UUID. Requires a server.",
     inputSchema: { uuid: z.string().describe("Entity UUID to remove.") },
-    annotations: WRITE,
+    annotations: OVERWRITE,
   },
 
   // ===== players (admin, server-side) ========================================================
@@ -268,7 +283,7 @@ export const TOOLS: ToolDef[] = [
     title: "Teleport player",
     description: "Teleport a player to coordinates (and optionally another dimension / facing). Requires a server.",
     inputSchema: { ...playerRef, ...vec3(), yaw: z.number().optional(), pitch: z.number().optional(), ...dimensionOpt },
-    annotations: WRITE,
+    annotations: OVERWRITE,
   },
   {
     name: "set_gamemode",
@@ -276,7 +291,7 @@ export const TOOLS: ToolDef[] = [
     title: "Set player game mode",
     description: "Set a player's game mode. Requires a server.",
     inputSchema: { ...playerRef, mode: z.enum(["survival", "creative", "adventure", "spectator"]) },
-    annotations: WRITE,
+    annotations: OVERWRITE,
   },
   {
     name: "give_item",
@@ -311,6 +326,7 @@ export const TOOLS: ToolDef[] = [
     title: "Send system message",
     description: 'Send a system/chat message to a player ("@all" to broadcast). Requires a server.',
     inputSchema: { ...playerRef, text: z.string() },
+    annotations: { ...ACT, openWorldHint: true },
   },
   {
     name: "kick_player",
@@ -318,7 +334,7 @@ export const TOOLS: ToolDef[] = [
     title: "Kick player",
     description: "Kick a player from the server. Requires a dedicated server.",
     inputSchema: { ...playerRef, reason: z.string().optional() },
-    annotations: WRITE,
+    annotations: { ...OVERWRITE, openWorldHint: true },
   },
 
   // ===== command =============================================================================
@@ -329,7 +345,7 @@ export const TOOLS: ToolDef[] = [
     description:
       "Execute an arbitrary Minecraft command at operator permission level 4 (do NOT include the leading slash) and capture its feedback output. This is extremely powerful (/setblock, /summon, /give, /tp, /gamerule, /execute, datapacks, ...). Requires a server.",
     inputSchema: { command: z.string().describe('Command without the leading slash, e.g. "time set day".') },
-    annotations: { destructiveHint: true, openWorldHint: true },
+    annotations: { ...WRITE, openWorldHint: true },
   },
 
   // ===== chat ================================================================================
@@ -340,6 +356,7 @@ export const TOOLS: ToolDef[] = [
     description:
       "Send a chat message. On a client this is sent as the local player (a leading '/' runs a command as that player, and needs enableCommands); on a dedicated server it is broadcast.",
     inputSchema: { message: z.string() },
+    annotations: { ...WRITE, openWorldHint: true },
   },
   {
     name: "get_recent_chat",
@@ -401,6 +418,7 @@ export const TOOLS: ToolDef[] = [
       sneak: z.boolean().optional(),
       sprint: z.boolean().optional(),
     },
+    annotations: STEER,
   },
   {
     name: "stop_movement",
@@ -408,6 +426,7 @@ export const TOOLS: ToolDef[] = [
     title: "Release all movement",
     description: "Client-only. Release all movement inputs (stop walking/jumping/sneaking/sprinting).",
     inputSchema: {},
+    annotations: STEER,
   },
   {
     name: "look",
@@ -421,6 +440,7 @@ export const TOOLS: ToolDef[] = [
       deltaYaw: z.number().optional().describe("Relative yaw change in degrees."),
       deltaPitch: z.number().optional().describe("Relative pitch change in degrees."),
     },
+    annotations: ACT,
   },
   {
     name: "look_at",
@@ -428,6 +448,7 @@ export const TOOLS: ToolDef[] = [
     title: "Look at a point",
     description: "Client-only. Rotate the player to face a world coordinate.",
     inputSchema: { ...vec3() },
+    annotations: STEER,
   },
   {
     name: "jump",
@@ -435,6 +456,7 @@ export const TOOLS: ToolDef[] = [
     title: "Jump once",
     description: "Client-only. Perform a single jump.",
     inputSchema: {},
+    annotations: ACT,
   },
   {
     name: "start_using_item",
@@ -442,6 +464,7 @@ export const TOOLS: ToolDef[] = [
     title: "Start using held item",
     description: "Client-only. Begin using/holding the right-click action of the held item (eat, draw bow, block with shield, etc.).",
     inputSchema: {},
+    annotations: WRITE,
   },
   {
     name: "stop_using_item",
@@ -449,6 +472,7 @@ export const TOOLS: ToolDef[] = [
     title: "Stop using held item",
     description: "Client-only. Release the right-click use action.",
     inputSchema: {},
+    annotations: STEER,
   },
 
   // ===== interact (client) ===================================================================
@@ -476,6 +500,7 @@ export const TOOLS: ToolDef[] = [
     title: "Use item / right-click",
     description: "Client-only. Perform a right-click with the held item like the use key does: on the entity or block under the crosshair first, then the item on its own (e.g. eat, throw). 'target' says which one acted (entity, block or air).",
     inputSchema: {},
+    annotations: WRITE,
   },
   {
     name: "attack_entity",
@@ -491,6 +516,7 @@ export const TOOLS: ToolDef[] = [
     title: "Interact with entity",
     description: "Client-only. Right-click/interact with an entity by UUID (e.g. trade with a villager, mount a horse). Out of reach, nothing is sent (result OUT_OF_REACH); otherwise 'result' is the client's prediction.",
     inputSchema: { uuid: z.string() },
+    annotations: WRITE,
   },
   {
     name: "drop_held_item",
@@ -498,6 +524,7 @@ export const TOOLS: ToolDef[] = [
     title: "Drop held item",
     description: "Client-only. Drop the held item (one, or the whole stack).",
     inputSchema: { wholeStack: z.boolean().optional().default(false) },
+    annotations: ACT,
   },
 
   // ===== inventory (client) ==================================================================
@@ -507,6 +534,7 @@ export const TOOLS: ToolDef[] = [
     title: "Select hotbar slot",
     description: "Client-only. Select a hotbar slot (0-8) as the held item.",
     inputSchema: { slot: z.number().int().min(0).max(8) },
+    annotations: STEER,
   },
   {
     name: "drop_slot",
@@ -514,6 +542,7 @@ export const TOOLS: ToolDef[] = [
     title: "Drop a specific slot",
     description: "Client-only. Drop the contents of a specific inventory slot.",
     inputSchema: { slot: z.number().int().min(0).max(40).describe("Inventory slot index (0-8 hotbar, 9-35 main, 36-39 armor, 40 offhand)."), wholeStack: z.boolean().optional().default(true) },
+    annotations: ACT,
   },
   {
     name: "swap_slots",
@@ -521,6 +550,7 @@ export const TOOLS: ToolDef[] = [
     title: "Swap two inventory slots",
     description: "Client-only. Swap the items in two inventory slots via container clicks (player inventory must be the active screen-less context).",
     inputSchema: { slotA: z.number().int().min(0).max(45), slotB: z.number().int().min(0).max(45) },
+    annotations: ACT,
   },
 
   // ===== vision (client) =====================================================================
@@ -561,6 +591,7 @@ export const TOOLS: ToolDef[] = [
       sprint: z.boolean().optional().default(false),
       timeoutSeconds: z.number().int().min(1).max(600).optional().default(60),
     },
+    annotations: STEER,
   },
   {
     name: "navigation_status",
@@ -576,6 +607,7 @@ export const TOOLS: ToolDef[] = [
     title: "Stop navigation",
     description: "Client-only. Cancel any active navigation and release movement.",
     inputSchema: {},
+    annotations: STEER,
   },
 
   // ===== session / menus (client) ============================================================
@@ -595,6 +627,7 @@ export const TOOLS: ToolDef[] = [
     description:
       "Client-only, in a world. Close the open screen: leaves the pause menu, chat or a container, and respawns the player on the death screen. Fails while a world is loading and outside a world (use join_world there).",
     inputSchema: {},
+    annotations: ACT,
   },
   {
     name: "list_worlds",
@@ -614,6 +647,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: {
       worldId: z.string().optional().describe('World id from list_worlds or get_screen, e.g. "sp:New World" or "mp:3f2a...". Omit to rejoin the last world.'),
     },
+    annotations: { ...ACT, openWorldHint: true },
   },
 
   // ===== events ==============================================================================

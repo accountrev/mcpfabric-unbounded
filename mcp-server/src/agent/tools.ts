@@ -20,6 +20,7 @@ import {
   shortId,
   type Located,
 } from "./format.js";
+import { ACT, OVERWRITE, READ, STEER, WRITE, type ToolAnnotations } from "../tools.js";
 import { formatGoalTree, GOAL_STATUSES, isOpen } from "./goals.js";
 import { formatJob, JobFailure, type JobContext } from "./jobs.js";
 import { formatMemory, MEMORY_KINDS, MEMORY_STATUSES, SentLedger, type Memory, type MemoryKind } from "./memory.js";
@@ -41,12 +42,10 @@ export interface AgentToolDef {
   title: string;
   description: string;
   inputSchema: z.ZodRawShape;
-  annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean; idempotentHint?: boolean };
+  annotations: ToolAnnotations;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   run: (rt: AgentRuntime, session: AgentSession, args: any) => Promise<string>;
 }
-
-const READ = { readOnlyHint: true } as const;
 
 const coords = {
   x: z.number().describe("X coordinate."),
@@ -170,6 +169,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       radius: z.number().int().min(1).max(12).optional().default(6).describe("Scan radius in chunks (clamped to what is loaded)."),
       find: z.array(z.string()).optional().describe('Block ids to locate, e.g. ["iron_ore","deepslate_iron_ore"].'),
     },
+    annotations: STEER,
     run: async (rt, _s, args: { radius: number; find?: string[] }) => {
       const find = args.find?.map(fullId);
       const { scan, report, at } = await rt.observe({ radius: args.radius, ...(find ? { find, findLimit: 24 } : {}) });
@@ -221,6 +221,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       dimension: z.string().optional(),
       importance: z.number().min(0).max(1).optional().describe("0..1, default 0.5."),
     },
+    annotations: ACT,
     run: async (rt, session, args) => {
       const world = await rt.world();
       let pos: Located | undefined;
@@ -320,6 +321,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       status: z.enum(MEMORY_STATUSES).optional(),
       delete: z.boolean().optional(),
     },
+    annotations: OVERWRITE,
     run: async (rt, _s, args) => {
       const world = await rt.world();
       if (args.delete) return rt.memory.delete(world, args.id) ? `deleted #${args.id}` : `#${args.id} not found`;
@@ -342,6 +344,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       ids: z.array(z.number().int()).optional(),
       radius: z.number().min(1).max(512).optional().default(96),
     },
+    annotations: STEER,
     run: async (rt, _s, args) => {
       const world = await rt.world();
       const { at } = await rt.here();
@@ -388,6 +391,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       priority: z.number().int().min(-10).max(10).optional().describe("Higher runs first among siblings."),
       activate: z.boolean().optional().describe("Mark it active right away."),
     },
+    annotations: ACT,
     run: async (rt, _s, args) => {
       const world = await rt.world();
       const g = rt.goals.add(world, {
@@ -418,6 +422,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       parent: z.number().int().nullable().optional().describe("New parent id, or null to make it a root goal."),
       delete: z.boolean().optional(),
     },
+    annotations: OVERWRITE,
     run: async (rt, _s, args) => {
       const world = await rt.world();
       if (args.delete) return rt.goals.delete(world, args.id) ? `deleted #${args.id} and its subgoals` : `#${args.id} not found`;
@@ -554,6 +559,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       sprint: z.boolean().optional(),
       waitSeconds,
     },
+    annotations: ACT,
     run: async (rt, session, args) => {
       const world = await rt.world();
       let target: { x: number; y: number; z: number; dim?: string };
@@ -589,6 +595,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       legs: z.number().int().min(1).max(20).optional().default(4).describe("How many frontier targets to visit."),
       waitSeconds,
     },
+    annotations: ACT,
     run: async (rt, session, args) =>
       startJob(rt, session, "explore", `${args.legs} legs`, args.waitSeconds, (ctx) => explore(rt, ctx, { legs: args.legs })),
   },
@@ -604,6 +611,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       maxSeconds: z.number().int().min(10).max(1800).optional().default(300),
       waitSeconds,
     },
+    annotations: WRITE,
     run: async (rt, session, args) =>
       startJob(rt, session, "collect", `${args.count}× ${(args.blocks as string[]).map((b) => shortId(fullId(b))).join("/")}`, args.waitSeconds, (ctx) =>
         collect(rt, ctx, { blocks: args.blocks, count: args.count, radius: args.radius, maxSeconds: args.maxSeconds }),
@@ -619,6 +627,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       count: z.number().int().min(1).max(640).optional().default(1),
       waitSeconds,
     },
+    annotations: WRITE,
     run: async (rt, session, args) =>
       startJob(rt, session, "craft", `${args.count}× ${shortId(fullId(args.item))}`, args.waitSeconds, (ctx) =>
         craft(rt, ctx, { item: args.item, count: args.count }),
@@ -644,6 +653,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     title: "Cancel the job",
     description: "Stop the running job and release movement.",
     inputSchema: { id: z.number().int().optional() },
+    annotations: STEER,
     run: async (rt, session, args) => {
       const job = await rt.jobs.cancel(args.id, session.id);
       if (job) return `cancelled job #${job.id} (${job.kind})`;
@@ -658,6 +668,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     description:
       "Open the chest/barrel/furnace/crafting table/modded machine at a position within reach, list its contents and remember them (so recall and plan_craft know what is stored where). Leaves the screen open for container_transfer; close_container when done.",
     inputSchema: { ...coords },
+    annotations: ACT,
     run: async (rt, _s, args) => {
       if (rt.jobs.running()) throw new Error("a job is running; wait for it or job_cancel it first");
       const world = await rt.world();
@@ -685,6 +696,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       item: z.string().optional().describe("Only this item id (default: everything)."),
       count: z.number().int().min(1).optional().describe("Stop once at least this many were moved."),
     },
+    annotations: ACT,
     run: async (rt, _s, args) => {
       const r = await rt.body.containerTransfer(args.direction, args.item ? fullId(args.item) : undefined, args.count);
       const state = await rt.body.containerState();
@@ -702,6 +714,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     title: "Close the open container",
     description: "Close the currently open container / crafting screen.",
     inputSchema: {},
+    annotations: STEER,
     run: async (rt) => {
       await rt.body.containerClose();
       rt.openContainer = undefined;
