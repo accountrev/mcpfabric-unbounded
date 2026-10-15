@@ -55,6 +55,7 @@ public final class InfoHandlers {
 			groups.addProperty("containers", client && McpFabric.config().enablePlayerControl);
 			groups.addProperty("recipes", client);
 			groups.addProperty("crafting", client && McpFabric.config().enablePlayerControl);
+			groups.addProperty("session", client && McpFabric.config().enablePlayerControl);
 			groups.addProperty("events", true);
 
 			JsonObject o = new JsonObject();
@@ -87,6 +88,7 @@ public final class InfoHandlers {
 				a.add("navigation");
 				a.add("containers");
 				a.add("crafting");
+				a.add("session");
 			}
 			if (McpFabric.config().enableVision) {
 				a.add("vision");

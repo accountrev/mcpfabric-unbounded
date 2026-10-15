@@ -252,6 +252,7 @@ Then set `MCPFABRIC_TOKEN` in the server's environment.
 **inventory (client)** — `select_hotbar_slot`, `drop_slot`, `swap_slots`
 **vision (client)** — `screenshot` (PNG for vision models), `describe_scene`
 **navigation (client)** — `navigate_to` (A\*), `navigation_status`, `stop_navigation`
+**session (client)** — `get_screen`, `close_screen` (pause menu, chat, container; respawns on the death screen), `list_worlds`, `join_world` (rejoin after a kick, a server restart or a game restart)
 **events** — `poll_events` (recent damage, deaths, chat, spawns, player join/leave)
 
 **agent runtime** ([docs/AGENT.md](docs/AGENT.md)) — persistent per-world memory, goals, map and background jobs:
