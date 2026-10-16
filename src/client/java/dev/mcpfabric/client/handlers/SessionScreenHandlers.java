@@ -204,7 +204,7 @@ public final class SessionScreenHandlers {
 	}
 
 	/** Saved singleplayer worlds. The list is read on the render thread; the summaries load in the background. */
-	private static List<LevelSummary> levelSummaries() throws RpcException {
+	static List<LevelSummary> levelSummaries() throws RpcException {
 		CompletableFuture<List<LevelSummary>> future = ClientMc.call(() -> {
 			Minecraft mc = ClientMc.mc();
 			try {
@@ -226,12 +226,12 @@ public final class SessionScreenHandlers {
 		}
 	}
 
-	private static boolean joinable(LevelSummary level) {
+	static boolean joinable(LevelSummary level) {
 		return !level.isLocked() && !level.isDisabled() && !level.requiresManualConversion() && level.isCompatible();
 	}
 
 	/** From the menus, and not while a connection or a world is already loading. */
-	private static boolean canJoin(Minecraft mc, Screen screen) {
+	static boolean canJoin(Minecraft mc, Screen screen) {
 		if (mc.level != null) return false;
 		String kind = kind(screen);
 		return !kind.equals("connecting") && !kind.equals("loading");
@@ -258,7 +258,7 @@ public final class SessionScreenHandlers {
 	}
 
 	/** {@code Minecraft.setScreen} moved to {@code Gui.setScreen} in 26.2. */
-	private static void setScreen(Minecraft mc, Screen screen) {
+	static void setScreen(Minecraft mc, Screen screen) {
 		//? if <26.2 {
 		mc.setScreen(screen);
 		//?} else

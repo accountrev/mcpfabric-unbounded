@@ -57,6 +57,7 @@ public final class InfoHandlers {
 			groups.addProperty("crafting", client && McpFabric.config().enablePlayerControl);
 			groups.addProperty("session", client && McpFabric.config().enablePlayerControl);
 			groups.addProperty("ui", client && McpFabric.config().enablePlayerControl && McpFabric.config().enableUiControl);
+			groups.addProperty("supervised", McpFabric.config().enableSupervisedControl);
 			groups.addProperty("events", true);
 
 			JsonObject o = new JsonObject();
@@ -70,6 +71,7 @@ public final class InfoHandlers {
 		a.add("info");
 		a.add("chat");
 		a.add("events");
+		if (McpFabric.config().enableSupervisedControl) a.add("supervised");
 		if (serverPresent) {
 			a.add("world_read");
 			a.add("entities");

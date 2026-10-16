@@ -7,6 +7,8 @@ import dev.mcpfabric.McpFabric;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -45,6 +47,15 @@ public final class McpConfig {
 	public boolean enableVision = true;
 	/** Generic control of game screens (ui.*). Off by default; also needs enablePlayerControl. */
 	public boolean enableUiControl = false;
+	/**
+	 * Supervised mode (supervised.*): one narrow action per call under short-lived authority. Off by
+	 * default. It is its own lock and does not need the flags above, so they can stay off.
+	 */
+	public boolean enableSupervisedControl = false;
+	/** Save folders supervised_enter_world may open (disposable worlds). Empty: none. */
+	public List<String> supervisedWorlds = new ArrayList<>();
+	/** Command roots supervised_command may run; data ({...}) is refused in every command. */
+	public List<String> supervisedCommands = new ArrayList<>(List.of("time", "weather"));
 
 	public transient Path source;
 
@@ -69,6 +80,8 @@ public final class McpConfig {
 		if (cfg.worldIdKey == null || cfg.worldIdKey.isBlank()) {
 			cfg.worldIdKey = UUID.randomUUID().toString().replace("-", "");
 		}
+		if (cfg.supervisedWorlds == null) cfg.supervisedWorlds = new ArrayList<>();
+		if (cfg.supervisedCommands == null) cfg.supervisedCommands = new ArrayList<>();
 		cfg.source = file;
 		cfg.save();
 		return cfg;

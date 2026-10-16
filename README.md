@@ -167,7 +167,10 @@ printed to logs.
   "enableCommands": true,
   "enablePlayerControl": true,
   "enableVision": true,
-  "enableUiControl": false
+  "enableUiControl": false,
+  "enableSupervisedControl": false,
+  "supervisedWorlds": [],
+  "supervisedCommands": ["time", "weather"]
 }
 ```
 
@@ -182,6 +185,12 @@ removes the sole authentication on an operator-level bridge. Keep `host` on `127
 fully understand the consequences — the bridge grants operator-level power. `worldIdKey` turns a
 server address into the opaque world id that `session.info` reports; like the token, it is never
 sent over the bridge.
+
+`enableSupervisedControl` (off by default) turns on the supervised mode: one narrow action per
+call under short-lived authority, with every outcome read back or reconciled. It is its own lock, so
+you can turn the other `enable*` flags off and leave the model only these actions.
+`supervisedWorlds` lists the save folders it may open, `supervisedCommands` the command roots it may
+run. See [docs/SUPERVISED.md](docs/SUPERVISED.md).
 
 ---
 
@@ -261,6 +270,7 @@ Then set `MCPFABRIC_TOKEN` in the server's environment.
 **navigation (client)** — `navigate_to` (A\*), `navigation_status`, `stop_navigation`
 **session (client)** — `get_screen`, `close_screen` (pause menu, chat, container; respawns on the death screen), `list_worlds`, `join_world` (rejoin after a kick, a server restart or a game restart)
 **ui (client, off by default: `enableUiControl`)** — `get_ui` (widgets of the open screen), `click_widget`, `set_text_field`
+**supervised (off by default: `enableSupervisedControl`)** ([docs/SUPERVISED.md](docs/SUPERVISED.md)) — `supervised_status`, `supervised_stop`, `supervised_input` (one key for up to 10 ticks), `supervised_read_block`, `supervised_set_block` (with a precondition), `supervised_command` (allowlisted roots), `supervised_enter_world` / `supervised_leave_world` (approved saves), `supervised_reconcile`
 **events** — `poll_events` (recent damage, deaths, chat, spawns, player join/leave)
 
 **agent runtime** ([docs/AGENT.md](docs/AGENT.md)) — persistent per-world memory, goals, map and background jobs:
@@ -290,7 +300,8 @@ Call `get_status` first — it reports which side you are on and which groups ar
 
 - The bridge listens on **`127.0.0.1` only** and requires a **bearer token**.
 - Operator-level capabilities (`run_command`, world writes, player control) are **on by default** —
-  this gives the AI full control. Turn off groups with the `enable*` flags if you need to.
+  this gives the AI full control. Turn off groups with the `enable*` flags if you need to, and use
+  `enableSupervisedControl` if the model should only take single, approved actions.
 - Do not expose `host` externally without understanding the risk and putting an authenticated
   reverse proxy in front of it. See [SECURITY.md](SECURITY.md).
 

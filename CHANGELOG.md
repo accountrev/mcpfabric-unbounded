@@ -7,10 +7,20 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
-- Groundwork for an opt-in supervised mode (#27): a game-independent core for short-lived grants
-  that cannot be renewed and admit one action and at most one cardinal input sample, fenced by
-  STOP, expiry and context changes, plus bookkeeping for the input channels the automation holds
-  and their cleanup. It is not wired into the mod yet: no new tools, flags or protocol changes.
+- Supervised mode (#27), behind the new `enableSupervisedControl` flag (off by default, and
+  independent of the other `enable*` flags) and reported as the `supervised` capability group. Each
+  call is one narrow action under a grant that names its exact target, is bound to the current
+  world and dimension, expires after 2 seconds and cannot be renewed; STOP, a context change or a
+  new supervisor session fences it. New tools: `supervised_input` (one movement key for up to 10
+  ticks), `supervised_read_block`, `supervised_set_block` (only if the block there is the expected
+  one), `supervised_command` (command roots from `supervisedCommands`), `supervised_enter_world` /
+  `supervised_leave_world` (saves from `supervisedWorlds`), `supervised_reconcile`,
+  `supervised_status` and `supervised_stop`. Every answer has an outcome (`applied`,
+  `not_applied`, `interrupted`, `pending`, `uncertain`); while one is pending or uncertain, no other
+  supervised action runs until it is reconciled, and nothing is retried automatically. The MCP
+  server keeps the supervisor session id and request sequence numbers to itself, so stale and
+  replayed requests are refused. Settled actions are reported as `supervised_action` events. See
+  [docs/SUPERVISED.md](docs/SUPERVISED.md).
 
 ## [0.7.0] - 2026-10-15
 

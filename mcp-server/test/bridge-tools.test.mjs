@@ -98,6 +98,16 @@ const BRIDGE_TOOLS = {
   set_text_field: { method: "ui.setText", args: { widget: 3, text: "diamond" }, invalid: { widget: 3, text: "x".repeat(257) } },
   // events
   poll_events: { method: "events.getRecent", args: { types: ["chat"], sinceId: 10 }, invalid: { sinceId: -1 } },
+  // supervised
+  supervised_status: { method: "supervised.status", args: {} },
+  supervised_stop: { method: "supervised.stop", args: {} },
+  supervised_input: { method: "supervised.input", args: { direction: "forward" }, invalid: { direction: "forward", ticks: 11 } },
+  supervised_read_block: { method: "supervised.readBlock", args: { ...pos }, invalid: { x: 10.5, y: 64, z: -5 } },
+  supervised_set_block: { method: "supervised.setBlock", args: { ...pos, block: "minecraft:stone", expect: "minecraft:air" }, invalid: { ...pos, block: "minecraft:stone" } },
+  supervised_command: { method: "supervised.command", args: { command: "time set day" }, invalid: { command: "x".repeat(257) } },
+  supervised_enter_world: { method: "supervised.enterWorld", args: { worldId: "sp:Test World" }, invalid: {} },
+  supervised_leave_world: { method: "supervised.leaveWorld", args: { worldId: "sp:Test World" }, invalid: { worldId: 1 } },
+  supervised_reconcile: { method: "supervised.reconcile", args: { actionId: "a1" }, invalid: { actionId: "a1", acknowledge: "yes" } },
 };
 
 const toolNamed = (name) => {
@@ -127,6 +137,7 @@ test("every bridge tool maps to its method and validates its arguments", () => {
 
 const TOKEN = "test-token";
 const PNG = "iVBORw0KGgo=";
+const SESSION = "0123456789abcdef0123456789abcdef";
 /** Calls the fake bridge received, in order. */
 const received = [];
 /** When set, the next bridge call fails with this error body. */
@@ -143,6 +154,7 @@ before(async () => {
     if (req.url !== "/rpc") return reply({});
     const { method, params } = JSON.parse(Buffer.concat(chunks).toString("utf8"));
     received.push({ method, params, auth: req.headers.authorization });
+    if (method === "supervised.begin") return reply({ ok: true, result: { session: SESSION } });
     if (failNext) {
       const error = failNext;
       failNext = undefined;
@@ -185,12 +197,23 @@ test("every bridge tool forwards its parsed arguments to its method", async () =
     received.length = 0;
     const result = await client.callTool({ name, arguments: entry.args });
     assert.equal(result.isError, undefined, `${name} failed: ${JSON.stringify(result.content)}`);
-    assert.equal(received.length, 1, `${name} made ${received.length} bridge calls`);
-    const [call] = received;
+    // A supervised tool opens the supervisor session on its first call.
+    const calls = received.filter((c) => c.method !== "supervised.begin");
+    assert.equal(calls.length, 1, `${name} made ${calls.length} bridge calls`);
+    const [call] = calls;
     assert.equal(call.method, entry.method, `${name} called the wrong method`);
     assert.equal(call.auth, `Bearer ${TOKEN}`, `${name} did not send the token`);
     // Defaults from the schema are applied before the call, as the MCP SDK parses the arguments.
-    assert.deepEqual(call.params, z.object(toolNamed(name).inputSchema).parse(entry.args), `${name} forwarded the wrong params`);
+    const parsed = z.object(toolNamed(name).inputSchema).parse(entry.args);
+    if (toolNamed(name).supervised) {
+      // The MCP server adds the session and a growing sequence number; the model passes neither.
+      const { session, seq, ...rest } = call.params;
+      assert.equal(session, SESSION, `${name} sent the wrong session`);
+      assert.ok(Number.isInteger(seq) && seq > 0, `${name} sent no sequence number`);
+      assert.deepEqual(rest, parsed, `${name} forwarded the wrong params`);
+    } else {
+      assert.deepEqual(call.params, parsed, `${name} forwarded the wrong params`);
+    }
     if (entry.image) {
       assert.deepEqual(result.content, [
         { type: "image", data: PNG, mimeType: "image/png" },

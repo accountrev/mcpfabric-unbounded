@@ -29,6 +29,17 @@ public final class Gates {
 		}
 	}
 
+	/**
+	 * The supervised mode (supervised.*). Its own lock: an operator can turn the other groups off and
+	 * leave the model only narrow actions under finite authority. {@code supervised.stop} is not
+	 * gated, so stopping always works.
+	 */
+	public static void supervised() throws RpcException {
+		if (!McpFabric.config().enableSupervisedControl) {
+			throw RpcException.unavailable("Supervised control is disabled in mcpfabric.config.json (enableSupervisedControl=false).");
+		}
+	}
+
 	/** Screenshots and scene descriptions. */
 	public static void vision() throws RpcException {
 		if (!McpFabric.config().enableVision) {

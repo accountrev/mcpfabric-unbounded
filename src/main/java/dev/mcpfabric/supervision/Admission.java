@@ -8,6 +8,8 @@ public enum Admission {
 	/** STOP, or a context change since the grant was issued, fenced it off. */
 	STOPPED,
 	EXPIRED,
+	/** The effect is about to act on another target than the grant names. */
+	TARGET_MISMATCH,
 	/** The grant already admitted its action, or its input sample. */
 	USED,
 	/** An input sample was asked for before the grant admitted its action. */
