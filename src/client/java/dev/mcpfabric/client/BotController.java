@@ -72,6 +72,11 @@ public final class BotController {
 		jumpOnceTicks = 0;
 	}
 
+	/** Whether the bot forced movement keys down on the last tick (movement or navigation running). */
+	public synchronized boolean drivingKeys() {
+		return drivingKeys;
+	}
+
 	public synchronized void jumpOnce() {
 		jumpOnceTicks = Math.max(jumpOnceTicks, 2);
 	}

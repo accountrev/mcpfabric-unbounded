@@ -27,10 +27,10 @@ function registeredMethods() {
   return methods;
 }
 
-/** Bridge methods the agent runtime calls itself (bridge.call("method", ...)) in mcp-server/src/agent/. */
+/** Bridge methods the MCP server calls itself (bridge.call("method", ...)) in mcp-server/src/: the agent runtime, the supervisor session. */
 function agentMethods() {
   const methods = new Set();
-  for (const file of filesEndingWith(join(repoRoot, "mcp-server", "src", "agent"), ".ts")) {
+  for (const file of filesEndingWith(join(repoRoot, "mcp-server", "src"), ".ts")) {
     for (const match of readFileSync(file, "utf8").matchAll(/bridge\.call(?:<[^>]*>)?\(\s*"([^"]+)"/g)) methods.add(match[1]);
   }
   return methods;
@@ -39,7 +39,7 @@ function agentMethods() {
 test("every tool calls a bridge method the mod registers, and every method is used", () => {
   const registered = registeredMethods();
   const agent = agentMethods();
-  assert.ok(agent.size > 0, "no bridge.call calls found under mcp-server/src/agent/");
+  assert.ok(agent.size > 0, "no bridge.call calls found under mcp-server/src/");
   const used = new Set([...TOOLS.map((tool) => tool.method), ...agent]);
   assert.ok(registered.size > 0, "no router.register calls found under src/");
   assert.deepEqual([...used].filter((m) => !registered.has(m)).sort(), [], "tools calling a method the mod does not register");

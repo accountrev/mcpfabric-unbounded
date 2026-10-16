@@ -46,6 +46,11 @@ export interface ToolDef {
   annotations: ToolAnnotations;
   /** Rendering: "json" (default) returns text + structuredContent; "image" returns an image block. */
   kind?: "json" | "image";
+  /**
+   * Supervised request: the MCP server adds its supervisor session id and a growing sequence number
+   * (see supervised.ts), so neither reaches the model.
+   */
+  supervised?: boolean;
 }
 
 // ----- reusable schema fragments -------------------------------------------------------------
@@ -685,6 +690,119 @@ export const TOOLS: ToolDef[] = [
     annotations: STEER,
   },
 
+  // ===== supervised (needs enableSupervisedControl) ==========================================
+  {
+    name: "supervised_status",
+    method: "supervised.status",
+    title: "Supervised mode status",
+    description:
+      "Needs enableSupervisedControl. Report the supervised mode: which operations can run on this side right now (with the reason when one cannot), open actions that must be reconciled before anything else, the latest actions and their outcomes, the approved saves, the allowed command roots, the keys supervised input holds, and the limits (grant lifetime, longest input sample).",
+    inputSchema: {},
+    annotations: READ,
+  },
+  {
+    name: "supervised_stop",
+    method: "supervised.stop",
+    title: "Stop supervised actions",
+    description:
+      "STOP for the supervised mode; always available. No grant issued before this call admits anything any more, and any supervised input is released. It does not roll back effects that were already admitted.",
+    inputSchema: {},
+    annotations: STEER,
+  },
+  {
+    name: "supervised_input",
+    method: "supervised.input",
+    title: "One supervised input sample",
+    description:
+      "Client-only, needs enableSupervisedControl. Hold one movement key (forward, back, left or right) for a few ticks (1-10, 20 ticks = 1 s), then release it. One call is one approved action: a new move needs a new call. Refused while the player holds that key, a screen is open, or movement/navigation runs. Answers with outcome applied, not_applied, interrupted (STOP, the key was released, the world or dimension changed) or uncertain, plus the position before and after.",
+    inputSchema: {
+      direction: z.enum(["forward", "back", "left", "right"]),
+      ticks: z.number().int().min(1).max(10).optional().default(4).describe("How long to hold the key, in client ticks."),
+    },
+    annotations: ACT,
+    supervised: true,
+  },
+  {
+    name: "supervised_read_block",
+    method: "supervised.readBlock",
+    title: "Supervised block readback",
+    description:
+      "Needs enableSupervisedControl and an integrated or dedicated server. Read one block at an exact position as one supervised action. Answers with outcome applied and the block, or not_applied with the reason (for example an unloaded chunk).",
+    inputSchema: {
+      x: z.number().int(),
+      y: z.number().int(),
+      z: z.number().int(),
+      ...dimensionOpt,
+    },
+    annotations: READ,
+    supervised: true,
+  },
+  {
+    name: "supervised_set_block",
+    method: "supervised.setBlock",
+    title: "Supervised block change",
+    description:
+      "Needs enableSupervisedControl and an integrated or dedicated server. Replace one block at an exact position, only if the block there is `expect` right now. Block state is allowed (oak_stairs[facing=north]), block data ({...}) is not. Answers with outcome applied (read back), not_applied (precondition failed, nothing changed) or uncertain (call supervised_reconcile, which reads the block again; the change is never retried automatically).",
+    inputSchema: {
+      x: z.number().int(),
+      y: z.number().int(),
+      z: z.number().int(),
+      ...dimensionOpt,
+      block: z.string().max(256).describe('The new block, e.g. "minecraft:stone" or "oak_stairs[facing=north]".'),
+      expect: z.string().max(128).describe('The block id that must be there now, e.g. "minecraft:air".'),
+    },
+    annotations: WRITE,
+    supervised: true,
+  },
+  {
+    name: "supervised_command",
+    method: "supervised.command",
+    title: "Supervised command",
+    description:
+      "Needs enableSupervisedControl and an integrated or dedicated server. Run one server command whose first word is in supervisedCommands in mcpfabric.config.json (time and weather by default); see supervised_status for the list. Command data ({...}) is refused. Answers with outcome applied or not_applied and the command output; uncertain if the server did not answer in time.",
+    inputSchema: {
+      command: z.string().max(256).describe('The command without or with a leading slash, e.g. "time set day".'),
+    },
+    annotations: { ...WRITE, openWorldHint: true },
+    supervised: true,
+  },
+  {
+    name: "supervised_enter_world",
+    method: "supervised.enterWorld",
+    title: "Enter an approved save",
+    description:
+      "Client-only, from the menus, needs enableSupervisedControl. Open a singleplayer save listed in supervisedWorlds in mcpfabric.config.json (worldId sp:<folder>, see supervised_status). Joining runs in the background: the outcome is pending, so call supervised_reconcile once get_screen shows inWorld (or after a few seconds) before doing anything else.",
+    inputSchema: {
+      worldId: z.string().describe('An approved save, e.g. "sp:Test World".'),
+    },
+    annotations: ACT,
+    supervised: true,
+  },
+  {
+    name: "supervised_leave_world",
+    method: "supervised.leaveWorld",
+    title: "Save and leave the world",
+    description:
+      "Client-only, needs enableSupervisedControl. Save and quit the singleplayer world the player is in, like the pause menu's Save and Quit; worldId must name that world. The outcome is pending until supervised_reconcile sees the title screen; that the save reached the disk is not verified.",
+    inputSchema: {
+      worldId: z.string().describe("The world the player is in, as get_screen reports it (lastWorldId)."),
+    },
+    annotations: ACT,
+    supervised: true,
+  },
+  {
+    name: "supervised_reconcile",
+    method: "supervised.reconcile",
+    title: "Reconcile a supervised action",
+    description:
+      "Needs enableSupervisedControl. Settle a supervised action whose outcome is pending or uncertain: reads the game again (the block, the world joined or left, the finished input sample) and reports the outcome. While any action is open, no other supervised action runs. If the outcome cannot be read back (a command), pass acknowledge: true to accept that it is unknown.",
+    inputSchema: {
+      actionId: z.string().describe('The actionId of the open action, e.g. "a3".'),
+      acknowledge: z.boolean().optional().default(false).describe("Close the action as acknowledged when the readback cannot settle it."),
+    },
+    annotations: STEER,
+    supervised: true,
+  },
   // ===== events ==============================================================================
   {
     name: "poll_events",

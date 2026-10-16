@@ -9,8 +9,10 @@ import dev.mcpfabric.handlers.CommandHandlers;
 import dev.mcpfabric.handlers.EntityHandlers;
 import dev.mcpfabric.handlers.InfoHandlers;
 import dev.mcpfabric.handlers.PlayerAdminHandlers;
+import dev.mcpfabric.handlers.SupervisedHandlers;
 import dev.mcpfabric.handlers.WorldHandlers;
 import dev.mcpfabric.platform.Platform;
+import dev.mcpfabric.supervision.Supervisor;
 import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +34,7 @@ public final class McpFabric {
 	private static EventBus eventBus;
 	private static SseHub sseHub;
 	private static HttpBridgeServer httpServer;
+	private static final Supervisor supervisor = new Supervisor();
 
 	private McpFabric() {}
 
@@ -51,6 +54,11 @@ public final class McpFabric {
 		return eventBus;
 	}
 
+	/** The supervised mode (#27): one session, finite authority and the action ledger. */
+	public static Supervisor supervisor() {
+		return supervisor;
+	}
+
 	public static void init(Platform loaderPlatform) {
 		platform = loaderPlatform;
 		config = McpConfig.load();
@@ -65,6 +73,7 @@ public final class McpFabric {
 		EntityHandlers.register(router);
 		PlayerAdminHandlers.register(router);
 		CommandHandlers.register(router);
+		SupervisedHandlers.register(router);
 		dev.mcpfabric.handlers.ChatHandlers.registerCommon(router, eventBus);
 
 		// On a dedicated server, chat.send broadcasts. On a client the client entrypoint registers
@@ -93,6 +102,8 @@ public final class McpFabric {
 	/** The running server (dedicated or integrated) finished starting. */
 	public static void onServerStarted(MinecraftServer server) {
 		ServerHolder.set(server);
+		// On a client the context is the world the player is in, set by the client tick.
+		if (!platform.isClient()) supervisor.enterContext("server:" + server.getWorldData().getLevelName());
 	}
 
 	public static void onServerStopping(MinecraftServer server) {
@@ -115,6 +126,7 @@ public final class McpFabric {
 
 	public static void onServerStopped(MinecraftServer server) {
 		ServerHolder.set(null);
+		if (!platform.isClient()) supervisor.enterContext(null);
 	}
 
 	/** End of every server tick. */

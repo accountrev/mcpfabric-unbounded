@@ -18,6 +18,7 @@ import { loadConfig, type ServerConfig } from "./config.js";
 import { BridgeClient, BridgeError, BridgeUnreachableError } from "./bridge.js";
 import { TOOLS, type ToolDef } from "./tools.js";
 import { isLocalRequest } from "./local-request.js";
+import { SupervisedSession } from "./supervised.js";
 import { AgentRuntime, defaultDbPath } from "./agent/runtime.js";
 import { AGENT_TOOLS, AgentSession } from "./agent/tools.js";
 
@@ -82,7 +83,7 @@ function imageResult(result: unknown): CallToolResult {
   };
 }
 
-function registerTools(server: McpServer, bridge: BridgeClient): void {
+function registerTools(server: McpServer, bridge: BridgeClient, supervised: SupervisedSession): void {
   for (const def of TOOLS as ToolDef[]) {
     const config = {
       title: def.title,
@@ -93,7 +94,7 @@ function registerTools(server: McpServer, bridge: BridgeClient): void {
 
     const handler = async (args: Record<string, unknown>): Promise<CallToolResult> => {
       try {
-        const result = await bridge.call(def.method, args ?? {});
+        const result = def.supervised ? await supervised.call(def.method, args ?? {}) : await bridge.call(def.method, args ?? {});
         return def.kind === "image" ? imageResult(result) : jsonResult(result);
       } catch (err) {
         return errorResult(err);
@@ -104,12 +105,9 @@ function registerTools(server: McpServer, bridge: BridgeClient): void {
   }
 }
 
-function registerAgentTools(server: McpServer, runtime: AgentRuntime): void {
+/** Registers the agent tools; returns what to do when the MCP session closes. */
+function registerAgentTools(server: McpServer, runtime: AgentRuntime): () => void {
   const session = new AgentSession();
-  // A job must not keep moving the player after the session that started it is gone.
-  server.server.onclose = () => {
-    void runtime.jobs.cancelOwnedBy(session.id).catch(() => undefined);
-  };
   for (const def of AGENT_TOOLS) {
     const config = {
       title: def.title,
@@ -127,6 +125,10 @@ function registerAgentTools(server: McpServer, runtime: AgentRuntime): void {
     };
     server.registerTool(def.name, config, handler);
   }
+  // A job must not keep moving the player after the session that started it is gone.
+  return () => {
+    void runtime.jobs.cancelOwnedBy(session.id).catch(() => undefined);
+  };
 }
 
 const BASE_INSTRUCTIONS =
@@ -148,8 +150,14 @@ function buildServer(bridge: BridgeClient, runtime: AgentRuntime | undefined): M
     { name: "mcpfabric", version: PKG_VERSION },
     { instructions: BASE_INSTRUCTIONS + (runtime ? AGENT_INSTRUCTIONS : "") },
   );
-  registerTools(server, bridge);
-  if (runtime) registerAgentTools(server, runtime);
+  const supervised = new SupervisedSession(bridge);
+  registerTools(server, bridge, supervised);
+  const closeAgent = runtime ? registerAgentTools(server, runtime) : undefined;
+  // Grants of this MCP session must not outlive it.
+  server.server.onclose = () => {
+    closeAgent?.();
+    void supervised.end();
+  };
   return server;
 }
 
