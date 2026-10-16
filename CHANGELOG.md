@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-16
+
+Fabric and NeoForge. Implements #27, thanks to @faizsaifulnizam.
+
 ### Added
 - Supervised mode (#27), behind the new `enableSupervisedControl` flag (off by default, and
   independent of the other `enable*` flags) and reported as the `supervised` capability group. Each
