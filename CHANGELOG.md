@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- Groundwork for an opt-in supervised mode (#27): a game-independent core for short-lived grants
+  that cannot be renewed and admit one action and at most one cardinal input sample, fenced by
+  STOP, expiry and context changes, plus bookkeeping for the input channels the automation holds
+  and their cleanup. It is not wired into the mod yet: no new tools, flags or protocol changes.
+
 ## [0.7.0] - 2026-10-15
 
 Fabric and NeoForge. Completes #14, thanks to @filiphsps.
