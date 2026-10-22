@@ -4,7 +4,26 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.0+unbound.1] - 2026-10-21
+
+Fabric and NeoForge. mcpfabric-unbounded fork starts here!
+
+### Added
+- The limits on what one call may read or return are settings in `mcpfabric.config.json`: a new
+  `limits` section (entity counts and radii, the scan radius as chunks or as a percentage of the
+  render distance, region volume, search budgets, result counts, UI text, the event buffer, event
+  streams, request size, path search budget) and a `mcpServer` section the MCP server reads over the
+  new `info.settings` method (what the agent tools show and accept, job and HTTP session limits,
+  the bridge timeout). Defaults are the previous values. Limits that only the MCP schema enforced
+  before (`query_entities`, `find_blocks`, `get_blocks_region`, `raycast`, `describe_scene`,
+  `give_item`, `get_recent_chat`, `poll_events`, `set_text_field`) are now enforced by the mod.
+- A `data` section adds data that was never sent, one toggle per kind, all off by default: item
+  data components, entity details, full entity NBT, block state properties in region reads and
+  searches, and block entity data.
+- A config screen for all of it, built with Cloth Config (optional): from Mod Menu on Fabric, from
+  the Mods list on NeoForge. Each data group is a dropdown with buttons that enable or disable it.
+  A General tab holds the bridge settings and the `enable*` flags; it copies the token to the
+  clipboard without showing it, and asks for a restart after `host` or `port` change.
 
 ## [0.8.0] - 2026-10-16
 

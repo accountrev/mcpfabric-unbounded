@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import com.mojang.blaze3d.platform.InputConstants;
+import dev.mcpfabric.McpFabric;
 import dev.mcpfabric.bridge.RpcContext;
 import dev.mcpfabric.bridge.RpcException;
 import dev.mcpfabric.bridge.RpcRouter;
@@ -75,9 +76,6 @@ import java.util.Set;
 public final class UiHandlers {
 	private UiHandlers() {}
 
-	private static final int MAX_WIDGETS = 200;
-	private static final int MAX_TEXT = 256;
-
 	/**
 	 * Refused even when a mod's screen extends them: menus with their own tools, links, folders, servers,
 	 * account settings, player reports and command blocks.
@@ -120,7 +118,7 @@ public final class UiHandlers {
 			List<AbstractWidget> list = widgets(screen);
 			for (int i = 0; i < list.size(); i++) widgets.add(describe(i, list.get(i)));
 			o.add("widgets", widgets);
-			if (list.size() == MAX_WIDGETS) o.addProperty("truncated", true);
+			if (list.size() >= McpFabric.config().limits.uiMaxWidgets) o.addProperty("truncated", true);
 			return o;
 		}));
 
@@ -154,7 +152,8 @@ public final class UiHandlers {
 		router.register("ui.setText", ctx -> ClientMc.call(() -> {
 			Gates.uiControl();
 			String text = ctx.getString("text");
-			if (text.length() > MAX_TEXT) throw RpcException.badRequest("text is longer than " + MAX_TEXT + " characters.");
+			int maxText = McpFabric.config().limits.uiMaxText;
+			if (text.length() > maxText) throw RpcException.badRequest("text is longer than " + maxText + " characters.");
 			Screen screen = openScreen();
 			AbstractWidget w = find(screen, ctx);
 			if (!(w instanceof EditBox box)) {
@@ -209,7 +208,7 @@ public final class UiHandlers {
 	}
 
 	private static void collect(GuiEventListener listener, List<AbstractWidget> out, Set<GuiEventListener> seen) {
-		if (out.size() >= MAX_WIDGETS || !seen.add(listener)) return;
+		if (out.size() >= McpFabric.config().limits.uiMaxWidgets || !seen.add(listener)) return;
 		if (listener instanceof ContainerEventHandler container) {
 			if (listener instanceof AbstractWidget w && !w.visible) return;
 			for (GuiEventListener child : container.children()) collect(child, out, seen);
@@ -277,6 +276,7 @@ public final class UiHandlers {
 	}
 
 	private static String clip(String s) {
-		return s.length() <= MAX_TEXT ? s : s.substring(0, MAX_TEXT) + "...";
+		int max = Math.max(0, McpFabric.config().limits.uiMaxText);
+		return s.length() <= max ? s : s.substring(0, max) + "...";
 	}
 }

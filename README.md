@@ -170,9 +170,36 @@ printed to logs.
   "enableUiControl": false,
   "enableSupervisedControl": false,
   "supervisedWorlds": [],
-  "supervisedCommands": ["time", "weather"]
+  "supervisedCommands": ["time", "weather"],
+  "limits": { "nearbyEntitiesMax": 64, "scanRadiusMode": "CHUNKS", "scanRadiusChunks": 12, "...": "..." },
+  "mcpServer": { "itemTypesShown": 24, "bridgeTimeoutMs": 15000, "jobMaxMinutes": 31, "...": "..." },
+  "data": { "items": { "enchantments": false, "lore": false, "...": false }, "entities": { "...": false }, "entityNbt": { "...": false }, "blockStates": { "...": false }, "blockEntities": { "...": false } }
 }
 ```
+
+The mod writes every key with its default on first launch. With [Cloth Config](https://modrinth.com/mod/cloth-config)
+installed you can also edit them in game: from [Mod Menu](https://modrinth.com/mod/modmenu) on Fabric,
+or the Mods list on NeoForge (both optional). Number fields take whole numbers only and each entry
+has a reset button. The General tab holds the settings above; the token is never shown there, only
+copied to the clipboard with a button, and `worldIdKey` stays in the file. Changes apply at once,
+except `host` and `port`: the bridge only reads them when the game starts, so Cloth asks to restart
+after you change them.
+
+- `limits` caps what one call may read or return: entities, scan radius (`scanRadiusMode` `CHUNKS`
+  uses `scanRadiusChunks`, `PERCENT` uses `scanRadiusPercent` of your render distance), region
+  volume, search budgets, result counts, UI text, the event buffer, request size. A request above a
+  limit is refused (the observe scan and the agent's internal perception clamp instead). Some of them (region volume, search budgets, `navNodeBudget`, the scan radius)
+  bound work on the game thread, so raising them can make the game stutter or the server freeze.
+- `mcpServer` holds what the MCP server applies itself: how much the agent tools show and accept,
+  the job limit, HTTP session limits and `bridgeTimeoutMs`. It reads them over the bridge every 15
+  seconds.
+- `data` adds data that is not sent by default, one toggle per kind in five groups (each a
+  dropdown on the config screen, with buttons that enable or disable the whole group): item data
+  components (enchantments, names, lore, durability, potions, attribute modifiers, custom data,
+  other), entity details (motion, equipment, every attribute, effects, a dropped item's stack),
+  entity NBT (players, other entities), block state properties (in region reads, in block
+  searches) and block entity data (containers, signs, spawners, other). Entity NBT and block entity
+  data need the world to run in this game or on a server with the mod.
 
 The `enable*` flags let you switch off dangerous capability groups. `enableUiControl` is the one
 that starts off: it lets the model click buttons and type into text fields of game screens
@@ -214,7 +241,7 @@ MCPFABRIC_URL=http://127.0.0.1:25599 MCPFABRIC_TOKEN=<token> node dist/index.js
 |------------------------|--------------------------|---------------------------------------------------|
 | `MCPFABRIC_URL`        | `http://127.0.0.1:25599` | Address of the mod's HTTP bridge.                 |
 | `MCPFABRIC_TOKEN`      | —                        | Bearer token from the mod config (required by default). |
-| `MCPFABRIC_TIMEOUT_MS` | `15000`                  | Per-call timeout to the bridge.                   |
+| `MCPFABRIC_TIMEOUT_MS` | `15000`                  | Per-call timeout to the bridge. When set, it replaces the mod's `bridgeTimeoutMs`. |
 | `MCPFABRIC_TRANSPORT`  | `stdio`                  | `stdio` or `http`.                                |
 | `MCPFABRIC_HTTP_PORT`  | `25600`                  | Port for the `http` transport (`/mcp`).           |
 

@@ -44,7 +44,7 @@ export class BridgeClient {
   constructor(
     private readonly baseUrl: string,
     private readonly token: string | undefined,
-    private readonly timeoutMs: number,
+    public timeoutMs: number,
   ) {}
 
   private headers(): Record<string, string> {

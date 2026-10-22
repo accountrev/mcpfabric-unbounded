@@ -21,13 +21,10 @@ import { isLocalRequest } from "./local-request.js";
 import { SupervisedSession } from "./supervised.js";
 import { AgentRuntime, defaultDbPath } from "./agent/runtime.js";
 import { AGENT_TOOLS, AgentSession } from "./agent/tools.js";
+import { SettingsCache } from "./settings.js";
 
 // dist/index.js -> ../package.json, so the reported version always matches the published package.
 const PKG_VERSION = (createRequire(import.meta.url)("../package.json") as { version: string }).version;
-
-/** HTTP transport: sessions idle this long are closed, and at most MAX_HTTP_SESSIONS stay open. */
-const SESSION_IDLE_MS = 30 * 60 * 1000;
-const MAX_HTTP_SESSIONS = 32;
 
 function log(...args: unknown[]): void {
   // stderr only — stdout is reserved for the stdio transport.
@@ -168,15 +165,17 @@ async function runStdio(bridge: BridgeClient, runtime: AgentRuntime | undefined)
   log(`stdio transport ready (bridge: ${process.env.MCPFABRIC_URL ?? "http://127.0.0.1:25599"})`);
 }
 
-async function runHttp(bridge: BridgeClient, runtime: AgentRuntime | undefined, cfg: ServerConfig): Promise<void> {
+async function runHttp(bridge: BridgeClient, runtime: AgentRuntime | undefined, cfg: ServerConfig, settings: SettingsCache): Promise<void> {
   // Stateful streamable-HTTP: one transport+server per session id.
   const sessions = new Map<string, { server: McpServer; transport: StreamableHTTPServerTransport; lastSeen: number }>();
 
   // Close sessions whose client went away without DELETE; otherwise they would stay open forever.
+  // The idle time and the session cap come from the game's config (httpSessionIdleMinutes, maxHttpSessions).
   const sweep = setInterval(() => {
     const now = Date.now();
+    const idleMs = settings.now().httpSessionIdleMinutes * 60_000;
     for (const [id, entry] of sessions) {
-      if (now - entry.lastSeen > SESSION_IDLE_MS) {
+      if (now - entry.lastSeen > idleMs) {
         sessions.delete(id);
         void entry.transport.close();
       }
@@ -211,7 +210,7 @@ async function runHttp(bridge: BridgeClient, runtime: AgentRuntime | undefined, 
     let entry = sid ? sessions.get(sid) : undefined;
     if (entry) entry.lastSeen = Date.now();
     if (!entry) {
-      if (sessions.size >= MAX_HTTP_SESSIONS) {
+      if (sessions.size >= (await settings.get()).maxHttpSessions) {
         res.writeHead(503, { "Content-Type": "text/plain" }).end("Too many open MCP sessions; close one (DELETE) or wait for idle ones to expire.");
         return;
       }
@@ -239,18 +238,24 @@ async function runHttp(bridge: BridgeClient, runtime: AgentRuntime | undefined, 
 async function main(): Promise<void> {
   const cfg = loadConfig();
   const bridge = new BridgeClient(cfg.bridgeUrl, cfg.token, cfg.timeoutMs);
+  const settings = new SettingsCache(bridge, (s) => {
+    if (!cfg.timeoutFixed) bridge.timeoutMs = s.bridgeTimeoutMs;
+  });
 
   // Best-effort connectivity hint (does not block startup; the mod may launch later).
   bridge
     .info()
     .then((info) => log("connected to bridge:", JSON.stringify(info)))
     .catch((err) => log("bridge not reachable yet:", (err as Error).message));
+  // Keep the game's settings (and with them the bridge timeout) current, whichever tools are used.
+  void settings.get();
+  setInterval(() => void settings.get(), 15_000).unref();
 
   let runtime: AgentRuntime | undefined;
   if (cfg.agent) {
     const dbPath = cfg.dataDir ? defaultDbPath({ MCPFABRIC_DATA_DIR: cfg.dataDir }) : defaultDbPath();
     try {
-      runtime = new AgentRuntime(bridge, { dbPath, ...(cfg.world ? { worldOverride: cfg.world } : {}) });
+      runtime = new AgentRuntime(bridge, { dbPath, settings, ...(cfg.world ? { worldOverride: cfg.world } : {}) });
       log(`agent runtime ready (memory: ${dbPath}, opened on first use)`);
     } catch (err) {
       // e.g. a Node build without node:sqlite: keep serving the plain bridge tools.
@@ -259,7 +264,7 @@ async function main(): Promise<void> {
   }
 
   if (cfg.transport === "http") {
-    await runHttp(bridge, runtime, cfg);
+    await runHttp(bridge, runtime, cfg, settings);
   } else {
     await runStdio(bridge, runtime);
   }

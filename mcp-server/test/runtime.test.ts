@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { z } from "zod";
 
-import { JobManager } from "../src/agent/jobs.js";
+import { DEFAULT_JOB_LIMITS, JobManager } from "../src/agent/jobs.js";
 import { AgentRuntime } from "../src/agent/runtime.js";
 import { AGENT_TOOLS, AgentSession } from "../src/agent/tools.js";
 import { FakeWorld, vanillaRecipes } from "./fake-world.js";
@@ -192,7 +192,7 @@ test("job manager: jobs belong to their session; closing it cancels the job", as
 
 test("job manager: a job stops at the overall time limit", async () => {
   const stopped: string[] = [];
-  const jobs = new JobManager(() => {}, async () => void stopped.push("released"), 60);
+  const jobs = new JobManager(() => {}, async () => void stopped.push("released"), () => ({ ...DEFAULT_JOB_LIMITS, maxMs: 60 }));
   const job = jobs.start("wait", "forever", (ctx) => ctx.sleep(10_000).then(() => "slept"));
   const done = await jobs.wait(job.id, 2000);
   assert.equal(done!.state, "failed");

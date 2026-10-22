@@ -38,16 +38,41 @@ loom {
 	}
 }
 
+repositories {
+	// Mod Menu from Modrinth's Maven
+	maven {
+		url = 'https://api.modrinth.com/maven'
+		content { includeGroup 'maven.modrinth' }
+	}
+}
+
 dependencies {
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	
+	// Optional at runtime: Mod Menu opens the config screen and Cloth Config builds it
+	// Also put on the dev client (runClient) so the screen can be tried there; neither ships in the jar
+	def clothConfig = "me.shedaniel.cloth:cloth-config-fabric:${project.cloth_config_version}"
+	def modMenu = "maven.modrinth:modmenu:${project.modmenu_version}"
+	
+	// Cloth Config bundles this library which the dev client does not unpack
+	localRuntime "me.shedaniel.cloth:basic-math:0.6.1"
+	
 	if (unobfuscated) {
 		// Unobfuscated Minecraft: no mappings, and mod deps need no remapping (plain implementation).
 		implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 		implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+		[clothConfig, modMenu].each {
+			compileOnly(it) { transitive = false }
+			localRuntime(it) { transitive = false }
+		}
 	} else {
 		mappings loom.officialMojangMappings()
 		modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 		modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+		[clothConfig, modMenu].each {
+			modCompileOnly(it) { transitive = false }
+			modLocalRuntime(it) { transitive = false }
+		}
 	}
 }
 

@@ -72,7 +72,8 @@ so earlier failures inform later plans), `skill` (a procedure that worked).
 You can also pass `waitSeconds` to block for a while. Follow a job with `job_status`, which
 long-polls, and stop it with `job_cancel`. Only one job runs at a time, because there is one body.
 A job belongs to the MCP session that started it: other sessions cannot see or cancel it, and
-closing the session (or its idle timeout in HTTP mode) cancels it. Any job stops after 31 minutes.
+closing the session (or its idle timeout in HTTP mode) cancels it. Any job stops after 31 minutes
+(`jobMaxMinutes` in the mod config).
 
 Every job checks health before each step. It stops with a clear reason when health drops to the
 limit (6 by default), so the model can decide whether to retreat, eat or fight.
@@ -115,6 +116,12 @@ keep pushing the bot back until navigation gives up.
 | `MCPFABRIC_AGENT` | on | `0` / `false` / `off` serves only the bridge tools |
 | `MCPFABRIC_DATA_DIR` | `~/.mcpfabric` | where `agent.db` lives |
 | `MCPFABRIC_WORLD` | from the game | force a world id (e.g. to share memory between two saves) |
+
+How much the agent tools show and accept (item types listed, matches shown, memory text length,
+`collect_blocks` / `craft_item` / `plan_craft` counts, `recall` and `map_view` limits...) and the job
+limits come from the `mcpServer` section of the game's `mcpfabric.config.json`, also on the mod's
+config screen. The server reads them over the bridge (`info.settings`) every 15 seconds and uses the
+mod's defaults until the game answers.
 
 It requires Node.js ≥ 22.16 for `node:sqlite` with FTS5. From Node 24.15 on there is no
 experimental warning; on earlier versions the runtime suppresses that one warning.

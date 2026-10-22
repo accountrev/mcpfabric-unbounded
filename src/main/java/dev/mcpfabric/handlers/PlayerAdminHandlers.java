@@ -63,7 +63,7 @@ public final class PlayerAdminHandlers {
 			Gates.commands();
 			ServerPlayer p = require(server, ctx.getString("player"));
 			String item = ctx.getString("itemId") + ctx.optString("nbt", "");
-			int count = ctx.optInt("count", 1);
+			int count = ctx.optInt("count", 1, McpFabric.config().limits.giveItemMaxCount);
 			return CommandRunner.run(server, "give " + playerName(p) + " " + item + " " + count).toJson();
 		}));
 

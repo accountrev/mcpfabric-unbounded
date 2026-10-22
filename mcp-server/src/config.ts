@@ -11,6 +11,8 @@ export interface ServerConfig {
   token: string | undefined;
   /** Per-request timeout for bridge calls, in milliseconds. */
   timeoutMs: number;
+  /** MCPFABRIC_TIMEOUT_MS is set, so the game's bridgeTimeoutMs does not replace timeoutMs. */
+  timeoutFixed: boolean;
   /** Transport used to talk to the MCP client. */
   transport: "stdio" | "http";
   /** Port for the streamable-HTTP transport (only used when transport === "http"). */
@@ -42,6 +44,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     bridgeUrl,
     token: env.MCPFABRIC_TOKEN || undefined,
     timeoutMs: int(env.MCPFABRIC_TIMEOUT_MS, 15000),
+    timeoutFixed: env.MCPFABRIC_TIMEOUT_MS !== undefined,
     transport,
     httpPort: int(env.MCPFABRIC_HTTP_PORT, 25600),
     agent: !/^(0|false|off|no)$/i.test(env.MCPFABRIC_AGENT ?? ""),

@@ -47,6 +47,12 @@ public final class RpcContext {
 		return asInt(key, params.get(key));
 	}
 
+	public int getInt(String key, int max) throws RpcException {
+		int v = getInt(key);
+		if (v > max) throw aboveLimit(key, max);
+		return v;
+	}
+
 	public double getDouble(String key) throws RpcException {
 		require(key);
 		return asDouble(key, params.get(key));
@@ -89,6 +95,13 @@ public final class RpcContext {
 		return has(key) ? asInt(key, params.get(key)) : def;
 	}
 
+	public int optInt(String key, int def, int max) throws RpcException {
+		if (!has(key)) return Math.min(def, max);
+		int v = asInt(key, params.get(key));
+		if (v > max) throw aboveLimit(key, max);
+		return v;
+	}
+
 	public long optLong(String key, long def) throws RpcException {
 		if (!has(key)) return def;
 		double d = asDouble(key, params.get(key));
@@ -98,6 +111,13 @@ public final class RpcContext {
 
 	public double optDouble(String key, double def) throws RpcException {
 		return has(key) ? asDouble(key, params.get(key)) : def;
+	}
+
+	public double optDouble(String key, double def, int max) throws RpcException {
+		if (!has(key)) return Math.min(def, max);
+		double v = asDouble(key, params.get(key));
+		if (v > max) throw aboveLimit(key, max);
+		return v;
 	}
 
 	public boolean optBool(String key, boolean def) throws RpcException {
@@ -178,6 +198,10 @@ public final class RpcContext {
 			if (s.equalsIgnoreCase("false")) return false;
 		}
 		throw wrongType(key, "a boolean");
+	}
+
+	private static RpcException aboveLimit(String key, int max) {
+		return RpcException.badRequest("Param '" + key + "' may be at most " + max + " (a limit in the mod config).");
 	}
 
 	private static RpcException wrongType(String key, String type) {

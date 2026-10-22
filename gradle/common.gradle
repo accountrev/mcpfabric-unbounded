@@ -38,6 +38,11 @@ repositories {
 	mavenCentral {
 		content { includeGroupByRegex 'org\\.(junit|opentest4j|apiguardian)(\\..*)?|com\\.google\\.code\\.gson' }
 	}
+	// Cloth Config builds the optional config screen (dev.mcpfabric.client.config); not bundled.
+	maven {
+		url = 'https://maven.shedaniel.me/'
+		content { includeGroup 'me.shedaniel.cloth' }
+	}
 }
 
 dependencies {

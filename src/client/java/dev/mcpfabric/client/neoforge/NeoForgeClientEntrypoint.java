@@ -3,15 +3,19 @@ package dev.mcpfabric.client.neoforge;
 import dev.mcpfabric.McpFabric;
 import dev.mcpfabric.client.ClientEvents;
 import dev.mcpfabric.client.McpFabricClient;
+import dev.mcpfabric.client.config.ConfigScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.network.chat.ChatType;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.EventPriority;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.ClientChatReceivedEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.GameShuttingDownEvent;
 
@@ -26,8 +30,12 @@ public final class NeoForgeClientEntrypoint {
 	/** Sender UUID NeoForge reports for messages without a player sender (Util.NIL_UUID). */
 	private static final UUID NO_SENDER = new UUID(0L, 0L);
 
-	public NeoForgeClientEntrypoint() {
+	public NeoForgeClientEntrypoint(ModContainer container) {
 		McpFabricClient.init();
+		// The config screen is built with Cloth Config, an optional dependency
+		if (ModList.get().isLoaded("cloth_config")) {
+			container.registerExtensionPoint(IConfigScreenFactory.class, (mod, parent) -> ConfigScreen.create(parent));
+		}
 
 		NeoForge.EVENT_BUS.addListener(NeoForgeClientEntrypoint::onClientTick);
 		NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, NeoForgeClientEntrypoint::onChat);

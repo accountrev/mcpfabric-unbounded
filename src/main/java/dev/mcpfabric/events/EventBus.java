@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.mcpfabric.bridge.Json;
 import dev.mcpfabric.bridge.SseHub;
+import dev.mcpfabric.config.McpConfig;
 
 import java.util.ArrayDeque;
 import java.util.Collection;
@@ -15,15 +16,15 @@ import java.util.concurrent.atomic.AtomicLong;
  * and fans new events out to SSE subscribers.
  */
 public final class EventBus {
-	private static final int CAPACITY = 2000;
-
 	private final SseHub sse;
+	private final McpConfig.Limits limits;
 	private final AtomicLong seq = new AtomicLong();
 	private final Deque<GameEvent> ring = new ArrayDeque<>();
 	private volatile long currentTick = 0L;
 
-	public EventBus(SseHub sse) {
+	public EventBus(SseHub sse, McpConfig.Limits limits) {
 		this.sse = sse;
+		this.limits = limits;
 	}
 
 	public void setTick(long tick) {
@@ -34,7 +35,7 @@ public final class EventBus {
 		GameEvent event = new GameEvent(seq.incrementAndGet(), type, currentTick, data);
 		synchronized (ring) {
 			ring.addLast(event);
-			while (ring.size() > CAPACITY) ring.removeFirst();
+			while (ring.size() > limits.eventBufferSize && !ring.isEmpty()) ring.removeFirst();
 		}
 		try {
 			sse.broadcast(type, Json.GSON.toJson(event.toJson()));

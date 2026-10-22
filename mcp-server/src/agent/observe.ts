@@ -3,6 +3,7 @@
  * update: chunks go into the map, notable blocks become (or refresh) place/container memories, and
  * remembered blocks that are no longer there are marked `gone`.
  */
+import { DEFAULT_SETTINGS, type Settings } from "../settings.js";
 import type { ScanPoi, ScanResult } from "./body.js";
 import { distance, fmtDistance, fmtPos, shortId, type Located } from "./format.js";
 import type { Memory, MemoryStore } from "./memory.js";
@@ -153,15 +154,20 @@ export function ingestScan(
   return report;
 }
 
-export function formatObserveReport(r: ObserveReport, here: Located): string {
+export function formatObserveReport(
+  r: ObserveReport,
+  here: Located,
+  shown: Pick<Settings, "observeNewPlacesShown" | "observeOreTypesShown"> = DEFAULT_SETTINGS,
+): string {
   const lines = [
     `observed ${r.chunks} chunks (${r.newChunks} new) around ${fmtPos(here)} ${shortId(r.dim)} · map knows ${r.knownChunks} chunks here`,
   ];
   const place = (m: Memory) => `#${m.id} ${m.title}${m.pos ? ` @ ${fmtPos(m.pos)} (${fmtDistance(distance(here, m.pos))})` : ""}`;
   if (r.added.length > 0) {
-    const shown = r.added.slice(0, 12).map(place);
-    if (r.added.length > 12) shown.push(`+${r.added.length - 12} more`);
-    lines.push(`new places: ${shown.join(" · ")}`);
+    const n = shown.observeNewPlacesShown;
+    const added = r.added.slice(0, n).map(place);
+    if (r.added.length > n) added.push(`+${r.added.length - n} more`);
+    lines.push(`new places: ${added.join(" · ")}`);
   }
   if (r.restored.length > 0) lines.push(`back again: ${r.restored.map(place).join(" · ")}`);
   if (r.gone.length > 0) lines.push(`gone (no longer there): ${r.gone.map(place).join(" · ")}`);
@@ -170,7 +176,7 @@ export function formatObserveReport(r: ObserveReport, here: Located): string {
   const ores = Object.entries(r.resources)
     .filter(([id]) => !/_log$|_stem$/.test(id))
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
+    .slice(0, shown.observeOreTypesShown)
     .map(([id, n]) => {
       const near = r.nearestRare[id];
       return near ? `${shortId(id)}×${n} (nearest ~${near.x} ${near.z}, ${fmtDistance(near.distance)})` : `${shortId(id)}×${n}`;

@@ -27,6 +27,7 @@ export class FakeWorld implements Bridge {
   unreachable = new Set<string>();
   calls: string[] = [];
   worldId = "sp:test";
+  settings: Record<string, number> | undefined;
   navState = "idle";
   /** Dropped items lying in the world. */
   drops: { uuid: string; id: string; count: number; x: number; y: number; z: number }[] = [];
@@ -106,6 +107,9 @@ export class FakeWorld implements Bridge {
     switch (method) {
       case "session.info":
         return { worldId: this.worldId, kind: "singleplayer", name: "test" };
+      case "info.settings":
+        if (!this.settings) throw new BridgeError({ code: "unknown_method", message: `fake: ${method}` });
+        return { mcpServer: this.settings };
       case "player.getState":
         return { x: p.x, y: p.y, z: p.z, yaw: 0, pitch: 0, health: p.health, maxHealth: 20, food: 20, dimension: p.dimension, gameMode: "survival", onGround: true, inWater: false, selectedSlot: p.selected };
       case "player.getInventory": {

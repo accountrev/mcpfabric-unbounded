@@ -245,9 +245,10 @@ export async function explore(rt: AgentRuntime, ctx: JobContext, opts: ExploreOp
   let newChunks = 0;
   let travelled = 0;
   const summary = (why: string) => {
+    const s = rt.settings.now();
     const lines = [`${why}: ${travelled} leg${travelled === 1 ? "" : "s"}, +${newChunks} chunks mapped`];
-    if (places.length > 0) lines.push(`new places: ${places.slice(0, 15).map((m) => `#${m.id} ${m.title} @ ${m.pos ? fmtPos(m.pos) : "?"}`).join(" · ")}`);
-    if (rare.size > 0) lines.push(`ores seen: ${fmtItems(Object.fromEntries(rare))}`);
+    if (places.length > 0) lines.push(`new places: ${places.slice(0, s.exploreNewPlacesShown).map((m) => `#${m.id} ${m.title} @ ${m.pos ? fmtPos(m.pos) : "?"}`).join(" · ")}`);
+    if (rare.size > 0) lines.push(`ores seen: ${fmtItems(Object.fromEntries(rare), s.itemTypesShown)}`);
     return lines.join("\n");
   };
   for (let leg = 0; leg < legs; leg++) {
@@ -316,7 +317,7 @@ export async function collect(rt: AgentRuntime, ctx: JobContext, opts: CollectOp
   const what = ids.map(shortId).join("/");
   const done = async (prefix: string) => {
     const gained = itemDelta(before, await rt.body.itemCounts());
-    return `${prefix}: broke ${broken}/${opts.count} ${what}; inventory +${fmtItems(gained) || "nothing"}`;
+    return `${prefix}: broke ${broken}/${opts.count} ${what}; inventory +${fmtItems(gained, rt.settings.now().itemTypesShown) || "nothing"}`;
   };
 
   const guard = new Guard(rt, ctx);
@@ -444,10 +445,18 @@ export function containerItems(st: ContainerState): Record<string, number> {
   return items;
 }
 
+/** One line per slot whose item carries data components (sent as the mod's item component toggles allow). */
+export function fmtSlotDetails(st: ContainerState): string {
+  return st.slots
+    .filter((s) => s.components)
+    .map((s) => `\n  slot ${s.slot} ${shortId(s.id)}×${s.count}: ${JSON.stringify(s.components)}`)
+    .join("");
+}
+
 /** Remember (or refresh) what a container at `pos` holds. */
 export function recordContainer(rt: AgentRuntime, world: string, pos: Located, blockId: string, st: ContainerState): Memory {
   const items = containerItems(st);
-  const body = Object.keys(items).length > 0 ? fmtItems(items, 60) : "empty";
+  const body = Object.keys(items).length > 0 ? fmtItems(items, rt.settings.now().containerItemTypesShown) : "empty";
   const existing = rt.memory.findAt(world, pos, ["container", "place"]);
   const data = { ...(existing?.data ?? {}), poi: true, items, size: st.size };
   if (existing) {

@@ -10,6 +10,7 @@ import dev.mcpfabric.bridge.RpcContext;
 import dev.mcpfabric.bridge.RpcException;
 import dev.mcpfabric.bridge.RpcRouter;
 import dev.mcpfabric.handlers.support.CommandRunner;
+import dev.mcpfabric.handlers.support.ExtraData;
 import dev.mcpfabric.handlers.support.Gates;
 import dev.mcpfabric.handlers.support.Levels;
 import net.minecraft.core.BlockPos;
@@ -35,14 +36,6 @@ import java.util.Set;
 
 /** World read (block/region/find/time/weather/dimensions/raycast) and write (set/fill/time/weather). */
 public final class WorldHandlers {
-	private static final int DEFAULT_REGION_CAP = 32768;
-	/**
-	 * Most positions one region read may visit (256x256x256). The scan runs on the server thread, so
-	 * maxBlocks alone (it limits the answer, not the work) let a huge mostly-air region freeze the server.
-	 */
-	private static final long MAX_REGION_VOLUME = 1L << 24;
-	private static final int SCAN_BUDGET = 250_000;
-
 	private WorldHandlers() {}
 
 	public static void register(RpcRouter router) {
@@ -56,6 +49,7 @@ public final class WorldHandlers {
 			o.addProperty("blockLight", level.getBrightness(LightLayer.BLOCK, pos));
 			o.addProperty("skyLight", level.getBrightness(LightLayer.SKY, pos));
 			o.addProperty("hardness", state.getDestroySpeed(level, pos));
+			ExtraData.addBlockEntity(o, level, pos, state);
 			return o;
 		}));
 
@@ -66,12 +60,15 @@ public final class WorldHandlers {
 			int minX = Math.min(from.getX(), to.getX()), minY = Math.min(from.getY(), to.getY()), minZ = Math.min(from.getZ(), to.getZ());
 			int maxX = Math.max(from.getX(), to.getX()), maxY = Math.max(from.getY(), to.getY()), maxZ = Math.max(from.getZ(), to.getZ());
 			boolean includeAir = ctx.optBool("includeAir", false);
+			var limits = McpFabric.config().limits;
+			var data = McpFabric.config().data;
 			long volume = (long) (maxX - minX + 1) * (maxY - minY + 1) * (maxZ - minZ + 1);
-			if (volume > MAX_REGION_VOLUME) {
-				throw RpcException.badRequest("Region has " + volume + " positions; the limit is " + MAX_REGION_VOLUME
-						+ " (for example 256x256x256). Split it into smaller regions.");
+
+			if (volume > limits.regionMaxVolume) {
+				throw RpcException.badRequest("Region has " + volume + " positions; the limit is " + limits.regionMaxVolume
+						+ " (a limit in the mod config). Split it into smaller regions.");
 			}
-			int cap = ctx.optInt("maxBlocks", DEFAULT_REGION_CAP);
+			int cap = ctx.optInt("maxBlocks", limits.regionDefaultMaxBlocks, limits.regionMaxBlocks);
 
 			JsonArray blocks = new JsonArray();
 			BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
@@ -90,6 +87,8 @@ public final class WorldHandlers {
 						b.addProperty("y", y);
 						b.addProperty("z", z);
 						b.addProperty("id", Levels.blockId(state));
+						if (data.blockStates.regions) Levels.addProperties(b, state);
+						ExtraData.addBlockEntity(b, level, m, state);
 						blocks.add(b);
 					}
 				}
@@ -107,16 +106,19 @@ public final class WorldHandlers {
 			ServerLevel level = Levels.resolve(server, ctx.optString("dimension", null));
 			BlockPos center = blockPos(ctx.getVec3("center"));
 			int cx = center.getX(), cy = center.getY(), cz = center.getZ();
-			int radius = ctx.getInt("radius");
-			int maxResults = ctx.optInt("maxResults", 64);
+			var limits = McpFabric.config().limits;
+			var data = McpFabric.config().data;
+			int radius = ctx.getInt("radius", limits.findBlocksMaxRadius);
+			int maxResults = ctx.optInt("maxResults", 64, limits.findBlocksMaxResults);
 			Set<String> wanted = new HashSet<>(ctx.getStringList("blockIds"));
 			if (wanted.isEmpty()) throw RpcException.badRequest("blockIds must not be empty.");
 
 			List<JsonObject> found = new ArrayList<>();
 			BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 			long scanned = 0;
+			int budget = limits.findBlocksScanBudget;
 			boolean truncated = false;
-			int r2 = radius * radius;
+			long r2 = (long) radius * radius; // the radius limit is configurable, so keep it from overflowing
 			int searchedRadius = -1;
 			// Cube shells from the center outwards (shell s = positions whose largest offset is s), so the
 			// scan budget is spent on the positions nearest to the center first.
@@ -127,7 +129,7 @@ public final class WorldHandlers {
 						// Inside the shell's x/y extent, only its two z faces belong to the shell.
 						int dzStep = Math.abs(dx) == s || Math.abs(dy) == s ? 1 : 2 * s;
 						for (int dz = -s; dz <= s; dz += dzStep) {
-							if (++scanned > SCAN_BUDGET) { truncated = true; break outer; }
+							if (++scanned > budget) { truncated = true; break outer; }
 							int dist2 = dx * dx + dy * dy + dz * dz;
 							if (dist2 > r2) continue;
 							m.set(cx + dx, cy + dy, cz + dz);
@@ -141,6 +143,8 @@ public final class WorldHandlers {
 							b.addProperty("z", m.getZ());
 							b.addProperty("id", id);
 							b.addProperty("distance", Math.sqrt(dist2));
+							if (data.blockStates.searches) Levels.addProperties(b, state);
+							ExtraData.addBlockEntity(b, level, m, state);
 							found.add(b);
 						}
 					}
@@ -262,7 +266,7 @@ public final class WorldHandlers {
 		if (dir.lengthSqr() < 1.0e-6) throw RpcException.badRequest("Direction has zero length.");
 		dir = dir.normalize();
 
-		double maxDistance = ctx.optDouble("maxDistance", 32.0);
+		double maxDistance = ctx.optDouble("maxDistance", 32.0, McpFabric.config().limits.raycastMaxDistance);
 		boolean includeFluids = ctx.optBool("includeFluids", false);
 		boolean includeEntities = ctx.optBool("includeEntities", true);
 

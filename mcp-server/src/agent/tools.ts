@@ -20,6 +20,7 @@ import {
   shortId,
   type Located,
 } from "./format.js";
+import { capped } from "../settings.js";
 import { ACT, OVERWRITE, READ, STEER, WRITE, type ToolAnnotations } from "../tools.js";
 import { formatGoalTree, GOAL_STATUSES, isOpen } from "./goals.js";
 import { formatJob, JobFailure, type JobContext } from "./jobs.js";
@@ -27,7 +28,7 @@ import { formatMemory, MEMORY_KINDS, MEMORY_STATUSES, SentLedger, type Memory, t
 import { formatObserveReport } from "./observe.js";
 import { collectRecipes, formatPlan, plan } from "./planner.js";
 import type { AgentRuntime } from "./runtime.js";
-import { collect, containerItems, craft, explore, openContainerAt, recordContainer, travel } from "./skills.js";
+import { collect, containerItems, craft, explore, fmtSlotDetails, openContainerAt, recordContainer, travel } from "./skills.js";
 import { chunkOf, renderMap, type MapMarker } from "./worldmap.js";
 
 /** Per-MCP-session state. */
@@ -90,7 +91,7 @@ async function startJob(
 ): Promise<string> {
   const job = rt.jobs.start(kind, summary, run, session.id);
   const done = wait ? await rt.jobs.wait(job.id, wait * 1000, session.id) : job;
-  const text = formatJob(done ?? job);
+  const text = formatJob(done ?? job, rt.settings.now().jobLogShown);
   return (done ?? job).state === "running" ? `${text}\n(poll job_status to follow it; job_cancel stops it)` : text;
 }
 
@@ -123,12 +124,13 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     annotations: READ,
     run: async (rt, session) => {
       const world = await rt.world();
+      const settings = await rt.settings.get();
       const { self, at } = await rt.here();
       const counts = await rt.body.itemCounts().catch(() => ({}));
       const lines = [
         `# brief · world ${world} · memory ${rt.memory.count(world)} entries · map ${rt.map.count(world)} chunks`,
         `you: ${fmtPos(at)} ${shortDim(at.dim)} · health ${self.health.toFixed(0)}/${self.maxHealth.toFixed(0)} · food ${self.food} · ${self.gameMode}`,
-        `inventory: ${fmtItems(counts, 20) || "empty"}`,
+        `inventory: ${fmtItems(counts, settings.briefItemTypesShown) || "empty"}`,
       ];
       const next = rt.goals.next(world);
       const goals = rt.goals.all(world);
@@ -139,16 +141,18 @@ export const AGENT_TOOLS: AgentToolDef[] = [
         lines.push(goals.length ? "goals: all closed — add the next one with goal_add" : "goals: none yet — set one with goal_add");
       }
       const job = rt.jobs.running();
-      if (job) lines.push(job.owner === undefined || job.owner === session.id ? formatJob(job) : "job: another MCP session is running one");
-      const nearby = rt.memory.recall(world, { near: at, radius: 160, limit: 8, kinds: ["place", "container", "note", "skill"] });
+      if (job) lines.push(job.owner === undefined || job.owner === session.id ? formatJob(job, settings.jobLogShown) : "job: another MCP session is running one");
+      const nearby = settings.briefNearbyMemories > 0
+        ? rt.memory.recall(world, { near: at, radius: 160, limit: settings.briefNearbyMemories, kinds: ["place", "container", "note", "skill"] })
+        : [];
       if (nearby.length > 0) {
         lines.push("nearby memory:");
         for (const s of nearby) {
-          lines.push(`  ${formatMemory(s.memory, { ...(s.distance !== undefined ? { distance: s.distance } : {}), bodyChars: 90 }).replace(/\n/g, "\n  ")}`);
+          lines.push(`  ${formatMemory(s.memory, { ...(s.distance !== undefined ? { distance: s.distance } : {}), bodyChars: settings.briefMemoryBodyChars }).replace(/\n/g, "\n  ")}`);
           session.ledger.mark(s.memory);
         }
       }
-      const radius = 5;
+      const radius = settings.briefMapRadius;
       const { cx, cz } = chunkOf(at);
       const chunks = rt.map.around(world, at.dim, cx, cz, radius);
       if (chunks.size > 0) {
@@ -166,18 +170,20 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     description:
       "Scan the loaded chunks around you (client-side, works in multiplayer) and update long-term state: the chunk map, remembered workstations/containers/portals/beds (new ones are added, vanished ones marked gone) and ore/wood counts. Optionally locate specific blocks with `find`. Cheap; call it after moving somewhere new.",
     inputSchema: {
-      radius: z.number().int().min(1).max(12).optional().default(6).describe("Scan radius in chunks (clamped to what is loaded)."),
+      radius: z.number().int().min(1).optional().default(6).describe("Scan radius in chunks (clamped to what is loaded and to the mod's scan radius limit, 12 by default)."),
       find: z.array(z.string()).optional().describe('Block ids to locate, e.g. ["iron_ore","deepslate_iron_ore"].'),
     },
     annotations: STEER,
     run: async (rt, _s, args: { radius: number; find?: string[] }) => {
       const find = args.find?.map(fullId);
-      const { scan, report, at } = await rt.observe({ radius: args.radius, ...(find ? { find, findLimit: 24 } : {}) });
-      let text = formatObserveReport(report, at);
+      const s = await rt.settings.get();
+      const { scan, report, at } = await rt.observe({ radius: args.radius, ...(find ? { find, findLimit: s.observeFindLimit } : {}) });
+      let text = formatObserveReport(report, at, s);
       if (find) {
         const found = (scan.found ?? []).sort((a, b) => distance(a, at) - distance(b, at));
+        const shown = s.observeFoundShown;
         text += found.length
-          ? `\nfound: ${found.slice(0, 12).map((b) => `${shortId(b.id)} @ ${fmtPos(b)} (${fmtDistance(distance(b, at))}${b.exposed === false ? ", buried" : ""})`).join(" · ")}${found.length > 12 ? ` +${found.length - 12} more` : ""}`
+          ? `\nfound: ${found.slice(0, shown).map((b) => `${shortId(b.id)} @ ${fmtPos(b)} (${fmtDistance(distance(b, at))}${b.exposed === false ? ", buried" : ""})`).join(" · ")}${found.length > shown ? ` +${found.length - shown} more` : ""}`
           : `\nfound: no ${find.map(shortId).join("/")} in the scanned area`;
       }
       return text;
@@ -189,17 +195,18 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     description:
       "North-up ASCII map of explored chunks around you (1 character = 1 chunk) with remembered places overlaid: base, deaths, portals, storage, workstations, rare ores. Unexplored chunks show as '?'.",
     inputSchema: {
-      radius: z.number().int().min(2).max(24).optional().default(10).describe("Radius in chunks."),
+      radius: z.number().int().min(2).optional().describe("Radius in chunks (default 10; at most the mod's mapViewMaxRadius, 24 by default)."),
     },
     annotations: READ,
-    run: async (rt, _s, args: { radius: number }) => {
+    run: async (rt, _s, args: { radius?: number }) => {
+      const radius = capped("radius", args.radius, 10, (await rt.settings.get()).mapViewMaxRadius);
       const world = await rt.world();
       const { at } = await rt.here();
       const { cx, cz } = chunkOf(at);
-      const chunks = rt.map.around(world, at.dim, cx, cz, args.radius);
-      const span = args.radius * 16 + 16;
+      const chunks = rt.map.around(world, at.dim, cx, cz, radius);
+      const span = radius * 16 + 16;
       const marks = markersFor(rt.memory.inBox(world, at.dim, at.x - span, at.x + span, at.z - span, at.z + span));
-      return renderMap(chunks, at, args.radius, marks);
+      return renderMap(chunks, at, radius, marks);
     },
   },
 
@@ -253,13 +260,15 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       kind: z.enum(MEMORY_KINDS).optional(),
       tags: z.array(z.string()).optional(),
       radius: z.number().min(1).optional().describe("Only memories within this many blocks of you."),
-      limit: z.number().int().min(1).max(50).optional().default(10),
+      limit: z.number().int().min(1).optional().describe("Most entries (default 10; at most the mod's recallMaxLimit, 50 by default)."),
       ids: z.array(z.number().int()).optional().describe("Fetch these entries in full."),
       includeGone: z.boolean().optional().describe("Include places marked gone."),
       fresh: z.boolean().optional().describe("Repeat entries already sent in this session."),
     },
     annotations: READ,
     run: async (rt, session, args) => {
+      const s = await rt.settings.get();
+      const limit = capped("limit", args.limit, 10, s.recallMaxLimit);
       const world = await rt.world();
       const here = await hereOrNull(rt);
       if (args.ids?.length) {
@@ -281,7 +290,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
         ...(here ? { near: here } : {}),
         ...(args.radius !== undefined ? { radius: args.radius } : {}),
         ...(args.includeGone ? { includeGone: true } : {}),
-        limit: args.limit,
+        limit,
       });
       const lines = [`# recall${args.query ? ` "${args.query}"` : " (nearby)"} · ${results.length} hit${results.length === 1 ? "" : "s"}`];
       const skipped: number[] = [];
@@ -291,12 +300,12 @@ export const AGENT_TOOLS: AgentToolDef[] = [
           continue;
         }
         session.ledger.mark(r.memory);
-        lines.push(formatMemory(r.memory, r.distance !== undefined ? { distance: r.distance } : {}));
+        lines.push(formatMemory(r.memory, { bodyChars: s.memoryBodyChars, ...(r.distance !== undefined ? { distance: r.distance } : {}) }));
       }
       if (skipped.length) lines.push(`already sent: ${skipped.map((id) => `#${id}`).join(" ")} (fresh:true repeats them)`);
       if (args.query && here) {
         const terms = (args.query.toLowerCase().match(/[a-z0-9_]+/g) ?? []).filter((t: string) => t.length >= 3);
-        const res = rt.map.findResources(world, here.dim, terms, here, 5);
+        const res = rt.map.findResources(world, here.dim, terms, here, s.recallResourceChunks);
         if (res.length) {
           lines.push("counted in chunk scans:");
           for (const r of res) {
@@ -332,7 +341,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
         ...(args.importance !== undefined ? { importance: args.importance } : {}),
         ...(args.status !== undefined ? { status: args.status } : {}),
       });
-      return m ? `updated ${formatMemory(m)}` : `#${args.id} not found`;
+      return m ? `updated ${formatMemory(m, { bodyChars: (await rt.settings.get()).memoryBodyChars })}` : `#${args.id} not found`;
     },
   },
   {
@@ -470,31 +479,33 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       "Expand an item into craft/smelt steps over the game's own recipes (vanilla and modded), using your current inventory, and list the raw materials still missing — plus remembered storage that holds them. On 1.21.2+ multiplayer only unlocked recipes are visible; singleplayer sees all.",
     inputSchema: {
       item: z.string().describe('Item id, e.g. "iron_pickaxe" or "create:cogwheel".'),
-      count: z.number().int().min(1).max(4096).optional().default(1),
+      count: z.number().int().min(1).optional().describe("How many (default 1; at most the mod's planCraftMaxCount, 4096 by default)."),
       knownOnly: z.boolean().optional().describe("Only use recipes you have unlocked (what craft_item can execute)."),
     },
     annotations: READ,
     run: async (rt, _s, args) => {
+      const settings = await rt.settings.get();
+      const count = capped("count", args.count, 1, settings.planCraftMaxCount);
       const world = await rt.world();
       const item = fullId(args.item);
       const cache = await collectRecipes(item, (ids) => rt.body.recipes(ids), new Map());
       if ((cache.get(item) ?? []).length === 0) return `no recipe produces ${shortId(item)} (it must be gathered, traded or looted)`;
       const inventory = await rt.body.itemCounts();
-      const p = plan(item, args.count, inventory, (id) => cache.get(id) ?? [], { knownOnly: !!args.knownOnly });
+      const p = plan(item, count, inventory, (id) => cache.get(id) ?? [], { knownOnly: !!args.knownOnly });
       let text = formatPlan(p);
       const missing = Object.keys(p.gather);
       if (missing.length > 0) {
         const here = await hereOrNull(rt);
         const stores = rt.memory
-          .recall(world, { kinds: ["container"], limit: 100, ...(here ? { near: here } : {}) })
+          .recall(world, { kinds: ["container"], limit: settings.planCraftStoresRecalled, ...(here ? { near: here } : {}) })
           .map((s) => s.memory)
           .filter((m) => missing.some((id) => ((m.data?.items as Record<string, number> | undefined)?.[id] ?? 0) > 0));
         if (stores.length > 0) {
           text += "\nin remembered storage:";
-          for (const m of stores.slice(0, 5)) {
+          for (const m of stores.slice(0, settings.planCraftStoresShown)) {
             const items = m.data!.items as Record<string, number>;
             const have = Object.fromEntries(missing.filter((id) => items[id]).map((id) => [id, items[id]!]));
-            text += `\n  #${m.id} ${m.title} @ ${m.pos ? fmtPos(m.pos) : "?"}: ${fmtItems(have)} (${fmtSeen(m.observedAt)})`;
+            text += `\n  #${m.id} ${m.title} @ ${m.pos ? fmtPos(m.pos) : "?"}: ${fmtItems(have, settings.itemTypesShown)} (${fmtSeen(m.observedAt)})`;
           }
         }
       }
@@ -511,10 +522,11 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       const item = fullId(args.item);
       const recipes = (await rt.body.recipes([item])).filter((r) => r.result.id === item);
       if (recipes.length === 0) return `no recipes produce ${shortId(item)}`;
+      const { recipesShown, recipeAlternativesShown: alt } = await rt.settings.get();
       return recipes
-        .slice(0, 12)
+        .slice(0, recipesShown)
         .map((r) => {
-          const ing = r.ingredients.map((alts) => (alts.length > 3 ? `${alts.slice(0, 3).map(shortId).join("|")}|…` : alts.map(shortId).join("|")));
+          const ing = r.ingredients.map((alts) => (alts.length > alt ? `${alts.slice(0, alt).map(shortId).join("|")}|…` : alts.map(shortId).join("|")));
           const shape = r.width && r.height ? ` ${r.width}×${r.height}` : "";
           return `${r.type}${shape}${r.known ? "" : " (locked)"}: ${shortId(r.result.id)}×${r.result.count} ← ${ing.join(", ")}`;
         })
@@ -606,16 +618,21 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       "Background job: find the nearest exposed blocks of the given types, walk to them, pick the best hotbar tool, mine them and pick up the drops, until `count` are broken. Refuses blocks your tools cannot harvest. Does not tunnel to buried blocks.",
     inputSchema: {
       blocks: z.array(z.string()).min(1).describe('Block ids, e.g. ["oak_log","birch_log"] or ["iron_ore","deepslate_iron_ore"].'),
-      count: z.number().int().min(1).max(256),
-      radius: z.number().int().min(8).max(128).optional().default(48).describe("Search radius in blocks."),
-      maxSeconds: z.number().int().min(10).max(1800).optional().default(300),
+      count: z.number().int().min(1).describe("Blocks to break (at most the mod's collectBlocksMaxCount, 256 by default)."),
+      radius: z.number().int().min(8).optional().describe("Search radius in blocks (default 48; at most collectBlocksMaxRadius, 128 by default)."),
+      maxSeconds: z.number().int().min(10).optional().describe("Time budget (default 300; at most collectBlocksMaxSeconds, 1800 by default)."),
       waitSeconds,
     },
     annotations: WRITE,
-    run: async (rt, session, args) =>
-      startJob(rt, session, "collect", `${args.count}× ${(args.blocks as string[]).map((b) => shortId(fullId(b))).join("/")}`, args.waitSeconds, (ctx) =>
-        collect(rt, ctx, { blocks: args.blocks, count: args.count, radius: args.radius, maxSeconds: args.maxSeconds }),
-      ),
+    run: async (rt, session, args) => {
+      const s = await rt.settings.get();
+      const count = capped("count", args.count, 1, s.collectBlocksMaxCount);
+      const radius = capped("radius", args.radius, 48, s.collectBlocksMaxRadius);
+      const maxSeconds = capped("maxSeconds", args.maxSeconds, 300, s.collectBlocksMaxSeconds);
+      return startJob(rt, session, "collect", `${count}× ${(args.blocks as string[]).map((b) => shortId(fullId(b))).join("/")}`, args.waitSeconds, (ctx) =>
+        collect(rt, ctx, { blocks: args.blocks, count, radius, maxSeconds }),
+      );
+    },
   },
   {
     name: "craft_item",
@@ -624,14 +641,16 @@ export const AGENT_TOOLS: AgentToolDef[] = [
       "Background job: plan and craft an item including intermediates (planks → sticks → tool) with the recipe book, using the 2×2 grid or a crafting table (walks to a nearby one, or places one from the inventory). Fails with the plan if materials are missing or a smelting step is needed.",
     inputSchema: {
       item: z.string(),
-      count: z.number().int().min(1).max(640).optional().default(1),
+      count: z.number().int().min(1).optional().describe("How many (default 1; at most the mod's craftItemMaxCount, 640 by default)."),
       waitSeconds,
     },
     annotations: WRITE,
-    run: async (rt, session, args) =>
-      startJob(rt, session, "craft", `${args.count}× ${shortId(fullId(args.item))}`, args.waitSeconds, (ctx) =>
-        craft(rt, ctx, { item: args.item, count: args.count }),
-      ),
+    run: async (rt, session, args) => {
+      const count = capped("count", args.count, 1, (await rt.settings.get()).craftItemMaxCount);
+      return startJob(rt, session, "craft", `${count}× ${shortId(fullId(args.item))}`, args.waitSeconds, (ctx) =>
+        craft(rt, ctx, { item: args.item, count }),
+      );
+    },
   },
   {
     name: "job_status",
@@ -644,7 +663,7 @@ export const AGENT_TOOLS: AgentToolDef[] = [
     annotations: READ,
     run: async (rt, session, args) => {
       const job = await rt.jobs.wait(args.id, args.waitSeconds * 1000, session.id);
-      if (job) return formatJob(job);
+      if (job) return formatJob(job, (await rt.settings.get()).jobLogShown);
       return rt.jobs.running() ? "no job of this session; another MCP session is running one" : "no jobs yet";
     },
   },
@@ -679,7 +698,8 @@ export const AGENT_TOOLS: AgentToolDef[] = [
         rt.openContainer = { pos, blockId: probe.id! };
         const m = recordContainer(rt, world, pos, probe.id!, state);
         const items = containerItems(state);
-        return `opened ${shortId(probe.id!)} @ ${fmtPos(pos)} (${state.type ? shortId(state.type) : "menu"}, ${state.size} slots) · memory #${m.id}\ncontents: ${fmtItems(items, 60) || "empty"}`;
+        const shown = (await rt.settings.get()).containerItemTypesShown;
+        return `opened ${shortId(probe.id!)} @ ${fmtPos(pos)} (${state.type ? shortId(state.type) : "menu"}, ${state.size} slots) · memory #${m.id}\ncontents: ${fmtItems(items, shown) || "empty"}${fmtSlotDetails(state)}`;
       } catch (err) {
         if (err instanceof JobFailure) return err.message;
         throw err;
@@ -706,7 +726,8 @@ export const AGENT_TOOLS: AgentToolDef[] = [
         const m = recordContainer(rt, world, rt.openContainer.pos, rt.openContainer.blockId, state);
         note = ` · memory #${m.id} updated`;
       }
-      return `${args.direction === "take" ? "took" : "put"} ${fmtItems(r.moved) || "nothing"}${note}\ncontainer now: ${fmtItems(containerItems(state), 60) || "empty"}`;
+      const s = await rt.settings.get();
+      return `${args.direction === "take" ? "took" : "put"} ${fmtItems(r.moved, s.itemTypesShown) || "nothing"}${note}\ncontainer now: ${fmtItems(containerItems(state), s.containerItemTypesShown) || "empty"}${fmtSlotDetails(state)}`;
     },
   },
   {

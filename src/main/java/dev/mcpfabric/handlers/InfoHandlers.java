@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.mcpfabric.McpFabric;
 import dev.mcpfabric.ServerHolder;
+import dev.mcpfabric.bridge.Json;
 import dev.mcpfabric.bridge.RpcRouter;
 import net.minecraft.server.MinecraftServer;
 
@@ -62,6 +63,14 @@ public final class InfoHandlers {
 
 			JsonObject o = new JsonObject();
 			o.add("groups", groups);
+			return o;
+		});
+
+		// Always on like the rest of info: only the MCP server's own limits from the config, nothing
+		// about the world, and the server needs them whatever capability groups are enabled.
+		router.register("info.settings", ctx -> {
+			JsonObject o = new JsonObject();
+			o.add("mcpServer", Json.GSON.toJsonTree(McpFabric.config().mcpServer));
 			return o;
 		});
 	}

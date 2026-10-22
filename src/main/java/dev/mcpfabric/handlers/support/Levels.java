@@ -82,21 +82,19 @@ public final class Levels {
 		o.addProperty("id", blockId(state));
 		o.addProperty("air", state.isAir());
 		o.addProperty("liquid", !state.getFluidState().isEmpty());
-
-		//? if <26.1 {
-		Map<Property<?>, Comparable<?>> values = state.getValues();
-		if (!values.isEmpty()) {
-			JsonObject props = new JsonObject();
-			for (Map.Entry<Property<?>, Comparable<?>> e : values.entrySet()) {
-				props.addProperty(e.getKey().getName(), propertyValue(e.getKey(), e.getValue()));
-			}
-			o.add("properties", props);
-		}
-		//?} else {
-		/*JsonObject props = new JsonObject();
-		state.getValues().forEach(v -> props.addProperty(v.property().getName(), v.valueName()));
-		if (props.size() > 0) o.add("properties", props);
-		*///?}
+		addProperties(o, state);
 		return o;
+	}
+
+	/** The block state's properties (facing, waterlogged...) as {@code properties}, when it has any. */
+	public static void addProperties(JsonObject o, BlockState state) {
+		JsonObject props = new JsonObject();
+		//? if <26.1 {
+		for (Map.Entry<Property<?>, Comparable<?>> e : state.getValues().entrySet()) {
+			props.addProperty(e.getKey().getName(), propertyValue(e.getKey(), e.getValue()));
+		}
+		//?} else
+		/*state.getValues().forEach(v -> props.addProperty(v.property().getName(), v.valueName()));*/
+		if (props.size() > 0) o.add("properties", props);
 	}
 }

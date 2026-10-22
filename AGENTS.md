@@ -36,7 +36,7 @@ bridge gives an AI **operator-level control** of a game. Treat every change as s
    in `README.md`, `docs/AGENT.md` if it concerns the runtime, the contract test in
    `mcp-server/test/`, and `CHANGELOG.md` under `[Unreleased]`.
 4. **Threads.** Game state is touched on the game thread only (`MainThread.call`). A bridge handler that
-   waits holds a bridge thread; SSE streams are capped (`SseHub.MAX_SUBSCRIBERS`), so never block
+   waits holds a bridge thread; SSE streams are capped (`limits.sseMaxSubscribers` in the config), so never block
    without a bound, and `SseHub.register` can return `null`. Register a subscriber before checking
    the event buffer, or events are lost.
 5. **Secrets and privacy.** The token and `worldIdKey` never go over the bridge, into logs, events,

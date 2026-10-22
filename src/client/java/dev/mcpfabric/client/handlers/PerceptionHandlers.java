@@ -6,6 +6,7 @@ import dev.mcpfabric.McpFabric;
 import dev.mcpfabric.bridge.RpcException;
 import dev.mcpfabric.bridge.RpcRouter;
 import dev.mcpfabric.client.ClientMc;
+import dev.mcpfabric.config.McpConfig;
 import dev.mcpfabric.handlers.support.Gates;
 import dev.mcpfabric.handlers.support.Levels;
 import dev.mcpfabric.handlers.support.OpaqueIds;
@@ -62,9 +63,6 @@ import java.util.function.Predicate;
  * </ul>
  */
 public final class PerceptionHandlers {
-	private static final int MAX_RADIUS = 12;
-	private static final int MAX_POIS = 400;
-
 	/** Blocks without block entities that are still worth remembering. */
 	private static final Set<String> POI_BLOCKS = Set.of(
 			"minecraft:crafting_table", "minecraft:smithing_table", "minecraft:stonecutter",
@@ -86,16 +84,18 @@ public final class PerceptionHandlers {
 		// Perception sees through walls and as far as the loaded chunks: it is vision, behind its lock.
 		router.register("perception.scan", ctx -> ClientMc.call(() -> {
 			Gates.vision();
-			int radius = Math.max(0, Math.min(MAX_RADIUS, ctx.optInt("radius", 6)));
+			McpConfig.Limits limits = McpFabric.config().limits;
+			int radius = Math.max(0, Math.min(scanRadiusCap(limits), ctx.optInt("radius", 6)));
 			Set<String> find = new HashSet<>(ctx.getStringList("find"));
-			int findLimit = Math.max(1, Math.min(500, ctx.optInt("findLimit", 64)));
-			return scan(ClientMc.level(), ClientMc.player(), radius, find, findLimit);
+			int findLimit = Math.max(1, Math.min(limits.scanFindLimitMax, ctx.optInt("findLimit", 64)));
+			return scan(ClientMc.level(), ClientMc.player(), radius, find, findLimit, limits.scanMaxPois);
 		}));
 
 		router.register("perception.entities", ctx -> ClientMc.call(() -> {
 			Gates.vision();
-			double radius = Math.max(1, Math.min(64, ctx.optDouble("radius", 16)));
-			return entities(ClientMc.level(), ClientMc.player(), radius, new HashSet<>(ctx.getStringList("kinds")));
+			McpConfig.Limits limits = McpFabric.config().limits;
+			double radius = Math.max(1, Math.min(limits.nearbyEntitiesRadius, ctx.optDouble("radius", 16)));
+			return entities(ClientMc.level(), ClientMc.player(), radius, new HashSet<>(ctx.getStringList("kinds")), limits.nearbyEntitiesMax);
 		}));
 
 		router.register("perception.blocks", ctx -> ClientMc.call(() -> {
@@ -104,7 +104,7 @@ public final class PerceptionHandlers {
 			LocalPlayer player = ClientMc.player();
 			boolean tool = ctx.optBool("tool", false);
 			JsonArray out = new JsonArray();
-			for (double[] p : ctx.getVec3List("positions", 512)) {
+			for (double[] p : ctx.getVec3List("positions", McpFabric.config().limits.blockProbesMax)) {
 				out.add(probe(level, player, BlockPos.containing(p[0], p[1], p[2]), tool));
 			}
 			JsonObject o = new JsonObject();
@@ -151,6 +151,14 @@ public final class PerceptionHandlers {
 
 	// --- scan ---------------------------------------------------------------------------------
 
+	/** Largest scan radius in chunks: fixed, or a share of the render distance (as limited by the server). */
+	private static int scanRadiusCap(McpConfig.Limits limits) {
+		if (limits.scanRadiusMode == McpConfig.RadiusMode.PERCENT) {
+			return ClientMc.mc().options.getEffectiveRenderDistance() * limits.scanRadiusPercent / 100;
+		}
+		return limits.scanRadiusChunks;
+	}
+
 	/** Per-block-type answers (render thread only), so id strings are built once per block type. */
 	private static final Map<Block, Boolean> ORE = new IdentityHashMap<>();
 	private static final Map<Block, Boolean> POI = new IdentityHashMap<>();
@@ -167,7 +175,7 @@ public final class PerceptionHandlers {
 		return POI.computeIfAbsent(state.getBlock(), b -> POI_BLOCKS.contains(blockId(b)));
 	}
 
-	private static JsonObject scan(ClientLevel level, LocalPlayer player, int radius, Set<String> find, int findLimit) {
+	private static JsonObject scan(ClientLevel level, LocalPlayer player, int radius, Set<String> find, int findLimit, int maxPois) {
 		double px = player.getX(), py = player.getY(), pz = player.getZ();
 		// ChunkPos became a record (x()/z()) in 26.1; the block position works everywhere.
 		int pcx = player.blockPosition().getX() >> 4;
@@ -211,7 +219,7 @@ public final class PerceptionHandlers {
 				section.getStates().count((state, n) -> {
 					if (countable(state)) counts.merge(blockId(state.getBlock()), n, Integer::sum);
 				});
-				boolean hasPoi = pois.size() < MAX_POIS && section.maybeHas(PerceptionHandlers::poiBlock);
+				boolean hasPoi = pois.size() < maxPois && section.maybeHas(PerceptionHandlers::poiBlock);
 				boolean hasWanted = searchChunk && section.maybeHas(wanted);
 				if (!hasPoi && !hasWanted) continue;
 				int baseY = chunk.getSectionYFromSectionIndex(i) << 4;
@@ -222,7 +230,7 @@ public final class PerceptionHandlers {
 							BlockState state = section.getBlockState(x, y, z);
 							if (state.isAir()) continue;
 							m.set(cx * 16 + x, baseY + y, cz * 16 + z);
-							if (hasPoi && pois.size() < MAX_POIS && poiBlock(state)) {
+							if (hasPoi && pois.size() < maxPois && poiBlock(state)) {
 								pois.add(poi(blockId(state), m, false));
 							}
 							if (hasWanted && wanted.test(state)) {
@@ -242,7 +250,7 @@ public final class PerceptionHandlers {
 			chunks.add(c);
 
 			for (Map.Entry<BlockPos, BlockEntity> e : chunk.getBlockEntities().entrySet()) {
-				if (pois.size() >= MAX_POIS) break;
+				if (pois.size() >= maxPois) break;
 				BlockEntity be = e.getValue();
 				String id = blockId(be.getBlockState());
 				boolean container = be instanceof Container;
@@ -280,7 +288,7 @@ public final class PerceptionHandlers {
 		o.add("chunks", chunks);
 		o.add("pois", poiJson);
 		if (!find.isEmpty()) o.add("found", foundJson);
-		o.addProperty("truncated", pois.size() >= MAX_POIS);
+		o.addProperty("truncated", pois.size() >= maxPois);
 		return o;
 	}
 
@@ -312,13 +320,13 @@ public final class PerceptionHandlers {
 		return "other";
 	}
 
-	private static JsonObject entities(ClientLevel level, LocalPlayer player, double radius, Set<String> kinds) {
+	private static JsonObject entities(ClientLevel level, LocalPlayer player, double radius, Set<String> kinds, int max) {
 		List<Entity> list = level.getEntities(player, player.getBoundingBox().inflate(radius), e -> e.isAlive()
 				&& (kinds.isEmpty() ? !entityKind(e).equals("other") : kinds.contains(entityKind(e))));
 		list.sort(Comparator.comparingDouble(e -> e.distanceToSqr(player)));
 		JsonArray out = new JsonArray();
 		for (Entity e : list) {
-			if (out.size() >= 64) break;
+			if (out.size() >= max) break;
 			JsonObject o = new JsonObject();
 			o.addProperty("uuid", e.getUUID().toString());
 			o.addProperty("type", String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(e.getType())));

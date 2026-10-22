@@ -8,6 +8,8 @@
  * closing the session cancels it. Every job also stops at an overall time limit.
  */
 
+import { DEFAULT_SETTINGS } from "../settings.js";
+
 export type JobState = "running" | "done" | "failed" | "cancelled";
 
 export interface Job {
@@ -44,10 +46,19 @@ export interface JobContext {
   checkpoint(): void;
 }
 
-const LOG_LINES = 40;
-const HISTORY = 10;
-/** Overall cap on one job; collect_blocks' own budget (up to 30 min) ends just before it. */
-export const JOB_MAX_MS = 31 * 60_000;
+/** Limits read when a job starts or logs (from the game's config: jobMaxMinutes, jobLogLines, jobHistory). */
+export interface JobLimits {
+  /** Overall cap on one job; by default collect_blocks' own budget (up to 30 min) ends just before it. */
+  maxMs: number;
+  logLines: number;
+  history: number;
+}
+
+export const DEFAULT_JOB_LIMITS: JobLimits = {
+  maxMs: DEFAULT_SETTINGS.jobMaxMinutes * 60_000,
+  logLines: DEFAULT_SETTINGS.jobLogLines,
+  history: DEFAULT_SETTINGS.jobHistory,
+};
 
 /** Can a session with this id see the job? */
 const visibleTo = (job: Job, owner: string | undefined) => job.owner === undefined || owner === undefined || job.owner === owner;
@@ -62,7 +73,7 @@ export class JobManager {
     private readonly onFinish: (job: Job) => void = () => {},
     /** Called when a job stops for any reason, to release the body (stop navigation, ...). */
     private readonly onStop: () => Promise<void> = async () => {},
-    private readonly maxMs: number = JOB_MAX_MS,
+    private readonly limits: () => JobLimits = () => DEFAULT_JOB_LIMITS,
   ) {}
 
   /** The running job, whoever started it. */
@@ -83,16 +94,18 @@ export class JobManager {
     if (owner !== undefined) job.owner = owner;
     const abort = new AbortController();
     let timedOut = false;
+    const maxMs = this.limits().maxMs;
     const limit = setTimeout(() => {
       timedOut = true;
       abort.abort();
-    }, this.maxMs);
+    }, maxMs);
     limit.unref?.();
     const ctx: JobContext = {
       signal: abort.signal,
       log: (message) => {
         job.log.push(message);
-        if (job.log.length > LOG_LINES) job.log.splice(0, job.log.length - LOG_LINES);
+        const keep = Math.max(0, this.limits().logLines);
+        if (job.log.length > keep) job.log.splice(0, job.log.length - keep);
       },
       progress: (message) => {
         job.progress = message;
@@ -132,12 +145,12 @@ export class JobManager {
         if (timedOut) {
           // A failure, not a cancel: it is recorded in memory so later plans can account for it.
           job.state = "failed";
-          job.result = `stopped at the job time limit (${Math.round(this.maxMs / 1000)} s)`;
+          job.result = `stopped at the job time limit (${Math.round(maxMs / 1000)} s)`;
         }
         job.endedAt = Date.now();
         this.current = undefined;
         this.history.unshift(job);
-        if (this.history.length > HISTORY) this.history.pop();
+        this.history.splice(Math.max(0, this.limits().history));
         try {
           await this.onStop();
         } catch {
@@ -193,11 +206,11 @@ export class JobManager {
   }
 }
 
-export function formatJob(job: Job, now: number = Date.now()): string {
+export function formatJob(job: Job, logShown = DEFAULT_SETTINGS.jobLogShown, now: number = Date.now()): string {
   const secs = Math.round(((job.endedAt ?? now) - job.startedAt) / 1000);
   const lines = [`job #${job.id} ${job.kind} [${job.state}] ${secs}s — ${job.summary}`];
   if (job.state === "running") lines.push(`progress: ${job.progress}`);
   if (job.result) lines.push(`result: ${job.result}`);
-  if (job.log.length > 0) lines.push("log:", ...job.log.slice(-8).map((l) => `  ${l}`));
+  if (job.log.length > 0 && logShown > 0) lines.push("log:", ...job.log.slice(-logShown).map((l) => `  ${l}`));
   return lines.join("\n");
 }

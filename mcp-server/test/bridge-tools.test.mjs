@@ -32,7 +32,7 @@ const BRIDGE_TOOLS = {
   find_blocks: { method: "world.findBlocks", args: { center: pos, radius: 16, blockIds: ["minecraft:diamond_ore"] }, invalid: { center: pos, radius: 16, blockIds: [] } },
   get_time_and_weather: { method: "world.getTimeAndWeather", args: { dimension: "minecraft:the_nether" }, invalid: { dimension: 7 } },
   list_dimensions: { method: "world.getDimensions", args: {} },
-  raycast: { method: "world.raycast", args: { origin: pos, yaw: 90, pitch: 10 }, invalid: { origin: pos, maxDistance: 300 } },
+  raycast: { method: "world.raycast", args: { origin: pos, yaw: 90, pitch: 10 }, invalid: { origin: pos, maxDistance: 0 } },
   // world (write)
   set_block: { method: "world.setBlock", args: { ...pos, blockId: "minecraft:oak_stairs[facing=east]" }, invalid: { ...pos } },
   fill_blocks: { method: "world.fill", args: { from: pos, to: corner, blockId: "minecraft:glass" }, invalid: { from: pos, blockId: "minecraft:glass" } },
@@ -55,7 +55,7 @@ const BRIDGE_TOOLS = {
   // command and chat
   run_command: { method: "command.run", args: { command: "time set day" }, invalid: {} },
   send_chat: { method: "chat.send", args: { message: "hi" }, invalid: { message: 1 } },
-  get_recent_chat: { method: "chat.getRecent", args: { limit: 10 }, invalid: { limit: 501 } },
+  get_recent_chat: { method: "chat.getRecent", args: { limit: 10 }, invalid: { limit: 0 } },
   // local player
   get_self: { method: "player.getState", args: {} },
   get_inventory: { method: "player.getInventory", args: {} },
@@ -82,7 +82,7 @@ const BRIDGE_TOOLS = {
   swap_slots: { method: "inventory.swapSlots", args: { slotA: 0, slotB: 36 }, invalid: { slotA: 0, slotB: 46 } },
   // vision
   screenshot: { method: "vision.screenshot", args: {}, image: true },
-  describe_scene: { method: "vision.describeScene", args: { rayColumns: 3, rayRows: 3 }, invalid: { rayColumns: 34 } },
+  describe_scene: { method: "vision.describeScene", args: { rayColumns: 3, rayRows: 3 }, invalid: { rayColumns: 0 } },
   // navigation
   navigate_to: { method: "nav.pathTo", args: { ...pos, sprint: true }, invalid: { ...pos, reachRadius: 17 } },
   navigation_status: { method: "nav.status", args: {} },
@@ -95,7 +95,7 @@ const BRIDGE_TOOLS = {
   // ui
   get_ui: { method: "ui.widgets", args: {} },
   click_widget: { method: "ui.click", args: { widget: "Done", fraction: 0.5 }, invalid: { widget: -1 } },
-  set_text_field: { method: "ui.setText", args: { widget: 3, text: "diamond" }, invalid: { widget: 3, text: "x".repeat(257) } },
+  set_text_field: { method: "ui.setText", args: { widget: 3, text: "diamond" }, invalid: { widget: 3, text: 7 } },
   // events
   poll_events: { method: "events.getRecent", args: { types: ["chat"], sinceId: 10 }, invalid: { sinceId: -1 } },
   // supervised

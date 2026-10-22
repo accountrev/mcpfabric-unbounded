@@ -1,5 +1,7 @@
 package dev.mcpfabric.bridge;
 
+import dev.mcpfabric.config.McpConfig;
+
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,15 +14,18 @@ import java.util.concurrent.TimeUnit;
  * matching subscriber without blocking the emitting (game) thread.
  */
 public final class SseHub {
-	/** Each open stream holds one bridge worker thread, so their number is capped. */
-	public static final int MAX_SUBSCRIBERS = 16;
-
 	private final Set<Subscriber> subscribers = ConcurrentHashMap.newKeySet();
+	/** Each open stream holds one bridge worker thread, so their number is capped (sseMaxSubscribers). */
+	private final McpConfig.Limits limits;
 
-	/** Registers a new stream, or returns null when {@link #MAX_SUBSCRIBERS} are already open. */
+	public SseHub(McpConfig.Limits limits) {
+		this.limits = limits;
+	}
+
+	/** Registers a new stream, or returns null when {@code sseMaxSubscribers} are already open. */
 	public synchronized Subscriber register(Set<String> typeFilter) {
-		if (subscribers.size() >= MAX_SUBSCRIBERS) return null;
-		Subscriber s = new Subscriber(typeFilter);
+		if (subscribers.size() >= limits.sseMaxSubscribers) return null;
+		Subscriber s = new Subscriber(typeFilter, Math.max(1, limits.sseQueueSize));
 		subscribers.add(s);
 		return s;
 	}
@@ -44,10 +49,11 @@ public final class SseHub {
 	/** A single SSE connection's outbound queue. */
 	public static final class Subscriber {
 		private final Set<String> filter;
-		private final BlockingQueue<String> queue = new LinkedBlockingQueue<>(2000);
+		private final BlockingQueue<String> queue;
 
-		private Subscriber(Set<String> filter) {
+		private Subscriber(Set<String> filter, int capacity) {
 			this.filter = filter;
+			this.queue = new LinkedBlockingQueue<>(capacity);
 		}
 
 		boolean accepts(String type) {

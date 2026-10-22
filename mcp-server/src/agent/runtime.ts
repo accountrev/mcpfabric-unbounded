@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { BridgeError } from "../bridge.js";
+import { SettingsCache } from "../settings.js";
 import { Body, type Bridge, type ScanResult, type SelfState } from "./body.js";
 import { KeyValue, openDatabase, requireSqlite, type Database } from "./db.js";
 import type { Located } from "./format.js";
@@ -20,6 +21,8 @@ export interface RuntimeOptions {
   dbPath: string;
   /** Force a world id instead of asking the game (MCPFABRIC_WORLD). */
   worldOverride?: string;
+  /** The game's settings, shared with the rest of the server (default: read through `bridge`). */
+  settings?: SettingsCache;
 }
 
 export function defaultDbPath(env: NodeJS.ProcessEnv = process.env): string {
@@ -40,6 +43,8 @@ interface Stores {
 export class AgentRuntime {
   readonly body: Body;
   readonly jobs: JobManager;
+  /** Limits from the game's config (what the tools show and accept, job limits). */
+  readonly settings: SettingsCache;
   private worldCache?: { id: string; at: number };
   /** The container the runtime opened last, so transfers can refresh its memory. */
   openContainer?: { pos: Located; blockId: string };
@@ -50,12 +55,17 @@ export class AgentRuntime {
   constructor(bridge: Bridge, private readonly opts: RuntimeOptions) {
     requireSqlite();
     this.body = new Body(bridge);
+    this.settings = opts.settings ?? new SettingsCache(bridge);
     this.jobs = new JobManager(
       (job) => this.recordJob(job),
       async () => {
         // Release the body whatever the job was doing: walking or mining.
         await this.body.navStop().catch(() => undefined);
         await this.body.stopBreaking().catch(() => undefined);
+      },
+      () => {
+        const s = this.settings.now();
+        return { maxMs: s.jobMaxMinutes * 60_000, logLines: s.jobLogLines, history: s.jobHistory };
       },
     );
   }

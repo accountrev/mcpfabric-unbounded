@@ -22,14 +22,14 @@ public final class ChatHandlers {
 
 	public static void registerCommon(RpcRouter router, EventBus events) {
 		router.register("chat.getRecent", ctx -> {
-			int limit = ctx.optInt("limit", 50);
+			int limit = ctx.optInt("limit", 50, McpFabric.config().limits.eventsMaxLimit);
 			JsonObject o = new JsonObject();
 			o.add("messages", events.recent(limit, List.of("chat", "system_message"), 0));
 			return o;
 		});
 
 		router.register("events.getRecent", ctx -> {
-			int limit = ctx.optInt("limit", 50);
+			int limit = ctx.optInt("limit", 50, McpFabric.config().limits.eventsMaxLimit);
 			long sinceId = ctx.optLong("sinceId", 0);
 			JsonObject o = new JsonObject();
 			o.add("events", events.recent(limit, ctx.getStringList("types"), sinceId));

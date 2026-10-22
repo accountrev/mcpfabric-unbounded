@@ -7,6 +7,7 @@ import dev.mcpfabric.bridge.Json;
 import dev.mcpfabric.bridge.RpcException;
 import dev.mcpfabric.bridge.RpcRouter;
 import dev.mcpfabric.client.ClientMc;
+import dev.mcpfabric.handlers.support.ExtraData;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
@@ -161,6 +162,7 @@ public final class ContainerHandlers {
 			s.addProperty("slot", slot.index);
 			s.addProperty("id", itemId(slot.getItem()));
 			s.addProperty("count", slot.getItem().getCount());
+			ExtraData.addComponents(s, slot.getItem(), p.registryAccess());
 			slots.add(s);
 		}
 		o.addProperty("size", size);

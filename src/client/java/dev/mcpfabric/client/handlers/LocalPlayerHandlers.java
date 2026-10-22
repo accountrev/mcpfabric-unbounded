@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.mcpfabric.bridge.RpcRouter;
 import dev.mcpfabric.client.ClientMc;
+import dev.mcpfabric.handlers.support.ExtraData;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -144,6 +145,7 @@ public final class LocalPlayerHandlers {
 			o.addProperty("damage", stack.getDamageValue());
 			o.addProperty("maxDamage", stack.getMaxDamage());
 		}
+		ExtraData.addComponents(o, stack, ClientMc.mc().level.registryAccess());
 		return o;
 	}
 }

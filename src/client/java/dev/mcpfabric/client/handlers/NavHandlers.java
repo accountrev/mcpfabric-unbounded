@@ -16,8 +16,6 @@ import java.util.List;
 
 /** A* navigation: start walking to a target, query status, stop. */
 public final class NavHandlers {
-	private static final int NODE_BUDGET = 12000;
-
 	private NavHandlers() {}
 
 	public static void register(RpcRouter router) {
@@ -33,7 +31,7 @@ public final class NavHandlers {
 			boolean sprint = ctx.optBool("sprint", false);
 			int timeout = ctx.optInt("timeoutSeconds", 60);
 
-			AStarPathfinder pf = new AStarPathfinder(level, NODE_BUDGET);
+			AStarPathfinder pf = new AStarPathfinder(level, McpFabric.config().limits.navNodeBudget);
 			List<BlockPos> path = pf.findPath(start, goal, reach);
 			if (path == null || path.isEmpty()) {
 				throw RpcException.notFound("No path found to target within the search budget (try a closer/standable target).");

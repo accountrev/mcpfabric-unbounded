@@ -35,7 +35,6 @@ import java.util.concurrent.TimeUnit;
 public final class VisionHandlers {
 	/** Cosine of the half-angle of the view cone used for visible entities (60 degrees, beyond the ray grid's corners). */
 	private static final double VIEW_CONE_COS = 0.5;
-	private static final int MAX_VISIBLE_ENTITIES = 16;
 
 	private VisionHandlers() {}
 
@@ -88,9 +87,10 @@ public final class VisionHandlers {
 			LocalPlayer p = ClientMc.player();
 			ClientLevel level = ClientMc.level();
 			Minecraft mc = ClientMc.mc();
-			double maxDistance = ctx.optDouble("maxDistance", 48.0);
-			int cols = ctx.optInt("rayColumns", 9);
-			int rows = ctx.optInt("rayRows", 5);
+			var limits = McpFabric.config().limits;
+			double maxDistance = ctx.optDouble("maxDistance", 48.0, limits.sceneMaxDistance);
+			int cols = ctx.optInt("rayColumns", 9, limits.sceneMaxRays);
+			int rows = ctx.optInt("rayRows", 5, limits.sceneMaxRays);
 
 			JsonObject o = new JsonObject();
 			Vec3 eye = p.getEyePosition();
@@ -145,7 +145,7 @@ public final class VisionHandlers {
 			});
 			visible.sort(Comparator.comparingDouble(e -> e.distanceTo(p)));
 			JsonArray entities = new JsonArray();
-			for (Entity e : visible.subList(0, Math.min(MAX_VISIBLE_ENTITIES, visible.size()))) {
+			for (Entity e : visible.subList(0, Math.max(0, Math.min(limits.sceneEntitiesMax, visible.size())))) {
 				JsonObject ej = new JsonObject();
 				ej.addProperty("uuid", e.getUUID().toString());
 				ej.addProperty("type", BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).toString());

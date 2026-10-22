@@ -60,6 +60,17 @@ class RpcContextTest {
 	}
 
 	@Test
+	void configuredLimitsRefuseLargerValuesAndLowerDefaults() throws RpcException {
+		assertBadRequest("radius", () -> ctx("{\"radius\": 129}").getInt("radius", 128));
+		assertBadRequest("maxResults", () -> ctx("{\"maxResults\": 65}").optInt("maxResults", 10, 64));
+		assertBadRequest("maxDistance", () -> ctx("{\"maxDistance\": 256.5}").optDouble("maxDistance", 32, 256));
+		assertEquals(128, ctx("{\"radius\": 128}").getInt("radius", 128));
+		assertEquals(64, ctx("{}").optInt("maxResults", 100, 64), "a default above the limit is lowered to it");
+		assertEquals(100, ctx("{}").optInt("maxResults", 100, 1000));
+		assertEquals(16.0, ctx("{}").optDouble("maxDistance", 32, 16));
+	}
+
+	@Test
 	void keepsAcceptingWhatGsonAcceptedBefore() throws RpcException {
 		assertEquals(5, ctx("{\"slot\": \"5\"}").getInt("slot"));
 		assertEquals(2.5, ctx("{\"r\": \"2.5\"}").getDouble("r"));

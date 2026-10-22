@@ -46,8 +46,6 @@ import java.util.Set;
  * accepted item ids per filled slot, which works for modded recipe types that provide displays.
  */
 public final class RecipeHandlers {
-	private static final int MAX_ALTERNATIVES = 16;
-
 	private RecipeHandlers() {}
 
 	public static void register(RpcRouter router) {
@@ -215,7 +213,7 @@ public final class RecipeHandlers {
 		Set<String> ids = new LinkedHashSet<>();
 		for (ItemStack stack : display.resolveForStacks(context)) {
 			if (!stack.isEmpty()) ids.add(itemId(stack));
-			if (ids.size() >= MAX_ALTERNATIVES) break;
+			if (ids.size() >= McpFabric.config().limits.recipeMaxAlternatives) break;
 		}
 		if (ids.isEmpty()) return; // empty cell of a shaped recipe
 		JsonArray alts = new JsonArray();
@@ -240,7 +238,7 @@ public final class RecipeHandlers {
 				Set<String> ids = new LinkedHashSet<>();
 				for (ItemStack stack : ingredient.getItems()) {
 					if (!stack.isEmpty()) ids.add(itemId(stack));
-					if (ids.size() >= MAX_ALTERNATIVES) break;
+					if (ids.size() >= McpFabric.config().limits.recipeMaxAlternatives) break;
 				}
 				if (ids.isEmpty()) continue;
 				JsonArray alts = new JsonArray();

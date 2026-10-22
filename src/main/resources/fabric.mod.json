@@ -21,6 +21,9 @@
 		],
 		"client": [
 			"dev.mcpfabric.client.fabric.FabricClientEntrypoint"
+		],
+		"modmenu": [
+			"dev.mcpfabric.client.fabric.ModMenuEntrypoint"
 		]
 	},
 	"depends": {
@@ -28,5 +31,9 @@
 		"minecraft": "${minecraft_dep}",
 		"java": ">=${java_dep}",
 		"fabric-api": "*"
+	},
+	"suggests": {
+		"modmenu": "*",
+		"cloth-config": "*"
 	}
 }

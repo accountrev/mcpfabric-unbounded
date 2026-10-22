@@ -25,3 +25,10 @@ type = "required"
 versionRange = "${minecraft_dep}"
 ordering = "NONE"
 side = "BOTH"
+
+[[dependencies.mcpfabric]]
+modId = "cloth_config"
+type = "optional"
+versionRange = "[1,)"
+ordering = "NONE"
+side = "CLIENT"

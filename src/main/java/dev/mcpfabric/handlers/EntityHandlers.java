@@ -9,7 +9,9 @@ import dev.mcpfabric.bridge.MainThread;
 import dev.mcpfabric.bridge.RpcContext;
 import dev.mcpfabric.bridge.RpcException;
 import dev.mcpfabric.bridge.RpcRouter;
+import dev.mcpfabric.config.McpConfig;
 import dev.mcpfabric.handlers.support.CommandRunner;
+import dev.mcpfabric.handlers.support.ExtraData;
 import dev.mcpfabric.handlers.support.Gates;
 import dev.mcpfabric.handlers.support.Levels;
 import net.minecraft.core.Holder;
@@ -23,6 +25,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
@@ -41,7 +44,8 @@ public final class EntityHandlers {
 	public static void register(RpcRouter router) {
 		router.register("entities.query", ctx -> onServer(server -> {
 			ServerLevel level = Levels.resolve(server, ctx.optString("dimension", null));
-			double radius = ctx.optDouble("radius", 32.0);
+			var limits = McpFabric.config().limits;
+			double radius = ctx.optDouble("radius", 32.0, limits.entitiesQueryMaxRadius);
 			Vec3 center;
 			String centerSource;
 			double[] c = ctx.optVec3("center");
@@ -62,7 +66,7 @@ public final class EntityHandlers {
 			final Vec3 origin = center;
 			boolean includePlayers = ctx.optBool("includePlayers", true);
 			boolean onlyLiving = ctx.optBool("onlyLiving", false);
-			int maxResults = ctx.optInt("maxResults", 100);
+			int maxResults = ctx.optInt("maxResults", 100, limits.entitiesQueryMaxResults);
 			Set<String> types = new HashSet<>(ctx.getStringList("types"));
 
 			AABB box = new AABB(origin, origin).inflate(radius);
@@ -76,7 +80,11 @@ public final class EntityHandlers {
 
 			JsonArray arr = new JsonArray();
 			for (int i = 0; i < Math.min(maxResults, entities.size()); i++) {
-				arr.add(describe(entities.get(i), origin));
+				Entity e = entities.get(i);
+				JsonObject d = describe(e, origin);
+				addExtra(d, e, false);
+				ExtraData.addEntityNbt(d, e);
+				arr.add(d);
 			}
 			JsonObject o = new JsonObject();
 			o.addProperty("dimension", Levels.dimensionId(level));
@@ -99,7 +107,8 @@ public final class EntityHandlers {
 				if (e != null) {
 					JsonObject o = describe(e, e.position());
 					o.addProperty("dimension", Levels.dimensionId(level));
-					addExtra(o, e);
+					addExtra(o, e, true);
+					ExtraData.addEntityNbt(o, e);
 					return o;
 				}
 			}
@@ -155,34 +164,52 @@ public final class EntityHandlers {
 		return o;
 	}
 
-	private static void addExtra(JsonObject o, Entity e) {
-		o.addProperty("onGround", e.onGround());
-		Vec3 v = e.getDeltaMovement();
-		JsonObject motion = new JsonObject();
-		motion.addProperty("x", v.x);
-		motion.addProperty("y", v.y);
-		motion.addProperty("z", v.z);
-		o.add("motion", motion);
-		o.addProperty("yaw", e.getYRot());
-		o.addProperty("pitch", e.getXRot());
+	private static void addExtra(JsonObject o, Entity e, boolean full) {
+		McpConfig.EntityDetails toggles = McpFabric.config().data.entities;
+		if (full || toggles.motion) {
+			o.addProperty("onGround", e.onGround());
+			Vec3 v = e.getDeltaMovement();
+			JsonObject motion = new JsonObject();
+			motion.addProperty("x", v.x);
+			motion.addProperty("y", v.y);
+			motion.addProperty("z", v.z);
+			o.add("motion", motion);
+			o.addProperty("yaw", e.getYRot());
+			o.addProperty("pitch", e.getXRot());
+		}
 		if (e instanceof LivingEntity le) {
-			JsonObject equipment = new JsonObject();
-			for (EquipmentSlot slot : EquipmentSlot.values()) {
-				ItemStack stack = le.getItemBySlot(slot);
-				if (stack.isEmpty()) continue;
-				JsonObject item = new JsonObject();
-				item.addProperty("id", BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
-				item.addProperty("count", stack.getCount());
-				equipment.add(slot.getName(), item);
+			if (full || toggles.equipment) {
+				JsonObject equipment = new JsonObject();
+				for (EquipmentSlot slot : EquipmentSlot.values()) {
+					ItemStack stack = le.getItemBySlot(slot);
+					if (stack.isEmpty()) continue;
+					JsonObject item = new JsonObject();
+					item.addProperty("id", BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+					item.addProperty("count", stack.getCount());
+					ExtraData.addComponents(item, stack, e.registryAccess());
+					equipment.add(slot.getName(), item);
+				}
+				o.add("equipment", equipment);
 			}
-			o.add("equipment", equipment);
-			JsonObject attributes = new JsonObject();
-			addAttribute(attributes, le, "max_health", Attributes.MAX_HEALTH);
-			addAttribute(attributes, le, "movement_speed", Attributes.MOVEMENT_SPEED);
-			addAttribute(attributes, le, "attack_damage", Attributes.ATTACK_DAMAGE);
-			addAttribute(attributes, le, "armor", Attributes.ARMOR);
-			addAttribute(attributes, le, "follow_range", Attributes.FOLLOW_RANGE);
-			o.add("attributes", attributes);
+			if (toggles.effects) o.add("effects", ExtraData.effects(le));
+			if (toggles.attributes) {
+				o.add("attributes", ExtraData.attributes(le));
+			} else if (full) {
+				JsonObject attributes = new JsonObject();
+				addAttribute(attributes, le, "max_health", Attributes.MAX_HEALTH);
+				addAttribute(attributes, le, "movement_speed", Attributes.MOVEMENT_SPEED);
+				addAttribute(attributes, le, "attack_damage", Attributes.ATTACK_DAMAGE);
+				addAttribute(attributes, le, "armor", Attributes.ARMOR);
+				addAttribute(attributes, le, "follow_range", Attributes.FOLLOW_RANGE);
+				o.add("attributes", attributes);
+			}
+		} else if (toggles.item && e instanceof ItemEntity ie) {
+			ItemStack stack = ie.getItem();
+			JsonObject item = new JsonObject();
+			item.addProperty("id", BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+			item.addProperty("count", stack.getCount());
+			ExtraData.addComponents(item, stack, e.registryAccess());
+			o.add("item", item);
 		}
 	}
 

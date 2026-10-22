@@ -29,9 +29,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * </ul>
  */
 public final class HttpBridgeServer {
-	/** Largest request body read; RPC calls are small JSON objects, NBT strings included. */
-	private static final int MAX_BODY_BYTES = 1 << 20;
-
 	private final McpConfig cfg;
 	private final RpcRouter router;
 	private final EventBus events;
@@ -103,10 +100,11 @@ public final class HttpBridgeServer {
 			return;
 		}
 
-		String body = readBody(ex);
+		int maxBody = cfg.limits.maxBodyBytes;
+		String body = readBody(ex, maxBody);
 		if (body == null) {
 			respond(ex, 413, Json.GSON.toJson(Json.envelopeError("payload_too_large",
-					"Request body exceeds " + MAX_BODY_BYTES + " bytes.", null)));
+					"Request body exceeds " + maxBody + " bytes.", null)));
 			return;
 		}
 		JsonObject req;
@@ -136,7 +134,7 @@ public final class HttpBridgeServer {
 		SseHub.Subscriber sub = sse.register(filter);
 		if (sub == null) {
 			respond(ex, 503, Json.GSON.toJson(Json.envelopeError("too_many_streams",
-					"At most " + SseHub.MAX_SUBSCRIBERS + " event streams may be open at once.", null)));
+					"At most " + cfg.limits.sseMaxSubscribers + " event streams may be open at once.", null)));
 			return;
 		}
 		ex.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8");
@@ -214,17 +212,17 @@ public final class HttpBridgeServer {
 		return filter;
 	}
 
-	/** The request body as text, or null when it is larger than {@link #MAX_BODY_BYTES}. */
-	private static String readBody(HttpExchange ex) throws IOException {
+	/** The request body as text, or null when it is larger than {@code max} bytes. */
+	private static String readBody(HttpExchange ex, int max) throws IOException {
 		String declared = ex.getRequestHeaders().getFirst("Content-Length");
 		try {
-			if (declared != null && Long.parseLong(declared.trim()) > MAX_BODY_BYTES) return null;
+			if (declared != null && Long.parseLong(declared.trim()) > max) return null;
 		} catch (NumberFormatException ignored) {
 			// no usable length: the read below still stops at the limit
 		}
 		try (InputStream is = ex.getRequestBody()) {
-			byte[] bytes = is.readNBytes(MAX_BODY_BYTES + 1);
-			return bytes.length > MAX_BODY_BYTES ? null : new String(bytes, StandardCharsets.UTF_8);
+			byte[] bytes = is.readNBytes((int) Math.min(Math.max(0L, max) + 1, Integer.MAX_VALUE));
+			return bytes.length > max ? null : new String(bytes, StandardCharsets.UTF_8);
 		}
 	}
 

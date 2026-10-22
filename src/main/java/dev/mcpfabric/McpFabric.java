@@ -62,8 +62,8 @@ public final class McpFabric {
 	public static void init(Platform loaderPlatform) {
 		platform = loaderPlatform;
 		config = McpConfig.load();
-		sseHub = new SseHub();
-		eventBus = new EventBus(sseHub);
+		sseHub = new SseHub(config.limits);
+		eventBus = new EventBus(sseHub, config.limits);
 		router = new RpcRouter();
 
 		// Server-capable handlers. Game event listeners are wired by the loader entrypoint and feed

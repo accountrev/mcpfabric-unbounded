@@ -254,7 +254,7 @@ export class MemoryStore {
   }
 
   recall(world: string, q: RecallQuery, now: number = Date.now()): ScoredMemory[] {
-    const limit = Math.max(1, Math.min(q.limit ?? 10, 100));
+    const limit = Math.max(1, q.limit ?? 10);
     const match = q.text ? ftsQuery(q.text) : null;
     const filters: string[] = ["m.world = ?"];
     const args: (string | number)[] = [world];

@@ -95,6 +95,8 @@ export interface SlotItem {
   slot: number;
   id: string;
   count: number;
+  /** Data components (enchantments, name, damage...), as the mod's item component toggles allow. */
+  components?: Record<string, unknown>;
 }
 
 export interface ContainerState {

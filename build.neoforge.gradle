@@ -78,6 +78,12 @@ processResources {
 	exclude 'fabric.mod.json'
 }
 
+dependencies {
+	// Builds the optional config screen, opened from the mod list when Cloth Config is installed
+	// Different from Fabric since NeoForge has its own mod list
+	clientCompileOnly("me.shedaniel.cloth:cloth-config-neoforge:${project.cloth_config_version}") { transitive = false }
+}
+
 jar {
 	from sourceSets.client.output
 }
